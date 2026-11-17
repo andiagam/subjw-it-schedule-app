@@ -219,14 +219,25 @@ class RosterTest extends TestCase
             ->assertSee('Christmas')
             ->assertSee('Public holiday')
             ->assertSee("New Year's Day")
-            ->assertSee("Isra and Mi'raj");
+            ->assertSee("Isra and Mi'raj")
+            ->assertSee("Today's Tasks")
+            ->assertSee('No tasks for today.')
+            ->assertSee('Activity Log')
+            ->assertDontSee('Hover or tap a date')
+            ->assertDontSee('The IT manager edits any schedule directly')
+            ->assertDontSee('Events, tasks, and public holidays in');
 
-        $queries = collect(DB::getQueryLog())->pluck('query');
+        $logged = collect(DB::getQueryLog());
+        $queries = $logged->pluck('query');
         $sql = strtolower($queries->implode("\n"));
+        $logQuery = $logged->first(fn (array $query) => str_contains(strtolower($query['query']), 'task_activity_logs'));
 
-        $this->assertSame(5, $queries->count(), $queries->implode("\n"));
+        $this->assertSame(6, $queries->count(), $queries->implode("\n"));
         $this->assertStringNotContainsString('exists', $sql);
         $this->assertStringNotContainsString('::date', $sql);
+        $this->assertNotNull($logQuery);
+        $this->assertStringContainsString('limit 30', strtolower($logQuery['query']));
+        $this->assertStringNotContainsString('users', strtolower($logQuery['query']));
         $this->assertSame(1, DayTask::query()->where('date', '2026-12-25')->where('kind', 'holiday')->count());
     }
 

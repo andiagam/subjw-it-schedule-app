@@ -41,37 +41,40 @@
             x-on:scroll.window="lifted = window.scrollY > 4"
             :class="lifted && 'shadow-sm'"
         >
-            <div class="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-2 px-4 py-2 sm:h-16 sm:flex-nowrap sm:gap-3 sm:px-6 sm:py-0 lg:px-8">
+            <div class="mx-auto flex h-14 max-w-[1600px] items-center justify-between gap-1 px-3 sm:h-16 sm:gap-3 sm:px-6 lg:px-8">
             @if($currentUser)
-                <a href="{{ route('roster.index') }}" aria-label="IT Roster" class="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-on-primary">
-                    <x-icon name="event_available" filled class="text-[20px]" />
-                </a>
-                <nav class="order-last flex w-full min-w-0 items-center gap-1 overflow-x-auto border-t border-slate-100 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:order-none sm:w-auto sm:flex-1 sm:border-t-0 sm:py-0 dark:border-slate-800 [&::-webkit-scrollbar]:hidden" aria-label="Primary">
-                    @foreach($nav as $item)
-                        @php $active = request()->routeIs($item['match']); @endphp
-                        <a href="{{ route($item['route']) }}" data-nav @if($active) aria-current="page" @endif class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm whitespace-nowrap sm:px-4 sm:py-2 {{ $active ? 'bg-secondary-container font-semibold text-on-secondary-container' : 'font-medium text-on-surface-variant hover:bg-surface-high' }}">
-                            <x-icon :name="$item['icon']" :filled="$active" class="text-[18px]" />
-                            {{ $item['label'] }}
-                            @if($item['route'] === 'requests.index' && $currentUser->isManager() && $pendingRequestCount > 0)
-                                <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-error px-1 text-[11px] font-medium text-on-error">{{ $pendingRequestCount }}</span>
-                            @endif
-                        </a>
-                    @endforeach
-                </nav>
+                <div class="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
+                    <a href="{{ route('roster.index') }}" aria-label="IT Roster" class="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-on-primary sm:size-9 sm:rounded-xl">
+                        <x-icon name="event_available" filled class="text-[18px] sm:text-[20px]" />
+                    </a>
+                    <nav class="flex min-w-0 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] sm:flex-1 [&::-webkit-scrollbar]:hidden" aria-label="Primary">
+                        @foreach($nav as $item)
+                            @php $active = request()->routeIs($item['match']); @endphp
+                            <a href="{{ route($item['route']) }}" data-nav @if($active) aria-current="page" @endif class="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1.5 text-xs whitespace-nowrap min-[400px]:px-2.5 sm:gap-1.5 sm:px-4 sm:py-2 sm:text-sm {{ $active ? 'bg-secondary-container font-semibold text-on-secondary-container' : 'font-medium text-on-surface-variant hover:bg-surface-high' }}">
+                                <x-icon :name="$item['icon']" :filled="$active" class="!hidden text-[16px] min-[460px]:!inline-block sm:text-[18px]" />
+                                {{ $item['label'] }}
+                                @if($item['route'] === 'requests.index' && $currentUser->isManager() && $pendingRequestCount > 0)
+                                    <span class="inline-flex min-w-5 items-center justify-center rounded-full bg-error px-1 text-[11px] font-medium text-on-error">{{ $pendingRequestCount }}</span>
+                                @endif
+                            </a>
+                        @endforeach
+                    </nav>
+                </div>
             @else
                 <div class="min-w-0 flex-1"></div>
             @endif
 
+            <div class="flex shrink-0 items-center sm:gap-2">
             <button
                 type="button"
-                class="ml-auto grid size-10 shrink-0 place-items-center rounded-full border border-outline-variant bg-surface-lowest text-on-surface hover:bg-surface-high sm:ml-0"
+                class="grid size-8 shrink-0 place-items-center rounded-full border border-outline-variant bg-surface-lowest text-on-surface hover:bg-surface-high sm:size-10"
                 role="switch"
                 x-data="{ dark: document.documentElement.classList.contains('dark') }"
                 :aria-checked="dark.toString()"
                 :aria-label="dark ? 'Switch to light mode' : 'Switch to dark mode'"
                 x-on:click="dark = !dark; document.documentElement.classList.toggle('dark', dark); document.documentElement.dataset.theme = dark ? 'dark' : 'light'; localStorage.setItem('theme', dark ? 'dark' : 'light')"
             >
-                <span class="material-symbols-rounded text-[20px]" x-text="dark ? 'light_mode' : 'dark_mode'"></span>
+                <span class="material-symbols-rounded text-[18px] sm:text-[20px]" x-text="dark ? 'light_mode' : 'dark_mode'"></span>
             </button>
 
             @if($currentUser)
@@ -81,10 +84,10 @@
                 @endphp
                 @if($canSwitchUser)
                     <div class="relative shrink-0" x-data="{ menu: false }" x-on:keydown.escape.window="menu = false">
-                        <button type="button" class="inline-flex h-10 max-w-[14rem] items-center gap-2 rounded-full border border-outline-variant bg-surface-lowest py-1 pr-2 pl-1 text-sm hover:bg-surface-high" x-on:click="menu = !menu" :aria-expanded="menu.toString()" aria-label="{{ $currentUser->name }}">
-                            <span class="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-xs font-medium text-on-primary" aria-hidden="true">{{ $initials }}</span>
+                        <button type="button" class="inline-flex h-8 items-center gap-0 rounded-full border border-outline-variant bg-surface-lowest py-0.5 pr-0 pl-0.5 text-sm hover:bg-surface-high sm:h-10 sm:max-w-[14rem] sm:gap-2 sm:py-1 sm:pr-2 sm:pl-1" x-on:click="menu = !menu" :aria-expanded="menu.toString()" aria-label="{{ $currentUser->name }}">
+                            <span class="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-medium text-on-primary sm:size-8 sm:text-xs" aria-hidden="true">{{ $initials }}</span>
                             <span class="hidden truncate sm:inline">{{ $currentUser->name }}</span>
-                            <x-icon name="expand_more" class="text-[18px] text-on-surface-variant" />
+                            <x-icon name="expand_more" class="text-[16px] text-on-surface-variant sm:text-[18px]" />
                         </button>
                         <div x-show="menu" x-cloak x-on:click.outside="menu = false" class="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-outline-variant bg-surface-lowest py-1 shadow-lg">
                             @foreach($switchUsers as $person)
@@ -107,19 +110,20 @@
                         </div>
                     </div>
                 @else
-                    <span class="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-outline-variant bg-surface-lowest py-1 pr-3 pl-1 text-sm">
-                        <span class="grid size-8 place-items-center rounded-full bg-primary text-xs font-medium text-on-primary" aria-hidden="true">{{ $initials }}</span>
+                    <span class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-full border border-outline-variant bg-surface-lowest py-0.5 pr-2 pl-0.5 text-sm sm:h-10 sm:gap-2 sm:py-1 sm:pr-3 sm:pl-1">
+                        <span class="grid size-7 place-items-center rounded-full bg-primary text-[11px] font-medium text-on-primary sm:size-8 sm:text-xs" aria-hidden="true">{{ $initials }}</span>
                         <span class="hidden truncate sm:inline">{{ $currentUser->name }}</span>
                     </span>
                 @endif
 
                 <form method="POST" action="{{ route('logout') }}" class="shrink-0">
                     @csrf
-                    <button type="submit" class="grid size-10 place-items-center rounded-full text-on-surface-variant hover:bg-surface-high" aria-label="Log out" title="Log out">
-                        <x-icon name="logout" class="text-[20px]" />
+                    <button type="submit" class="grid size-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-high sm:size-10" aria-label="Log out" title="Log out">
+                        <x-icon name="logout" class="text-[18px] sm:text-[20px]" />
                     </button>
                 </form>
             @endif
+            </div>
             </div>
         </header>
 
@@ -129,7 +133,7 @@
             </div>
         @endif
 
-        <main class="{{ $currentUser ? 'px-6 py-6 pb-24 lg:px-8' : 'min-h-screen flex items-center justify-center p-4' }}">
+        <main class="{{ $currentUser ? 'px-4 pt-3 pb-24 sm:px-6 sm:pt-6 lg:px-8' : 'min-h-screen flex items-center justify-center p-4' }}">
             <div class="{{ $currentUser ? 'mx-auto w-full max-w-[1600px]' : 'w-full max-w-md' }}">
                 @if($errors->any())
                     <div class="mb-4 rounded-xl bg-error-container px-4 py-3 text-sm text-on-error-container">

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DayTask;
 use App\Models\LeaveRequest;
 use App\Models\RosterEntry;
+use App\Models\TaskActivityLog;
 use App\Models\User;
 use App\Services\RosterExportService;
 use App\Services\RosterService;
@@ -26,19 +27,30 @@ class RosterController extends Controller
         $users = $roster->activeUsers();
         $entries = $roster->entriesForMonth($start);
 
+        $today = CarbonImmutable::now()->startOfDay();
+        $todayKey = $today->toDateString();
+        $rangeStart = min($start->toDateString(), $todayKey);
+        $rangeEnd = max($start->addMonth()->endOfMonth()->toDateString(), $todayKey);
+
         $calendar = DayTask::query()
-            ->whereBetween('date', [$start->toDateString(), $start->addMonth()->endOfMonth()->toDateString()])
+            ->whereBetween('date', [$rangeStart, $rangeEnd])
             ->orderBy('date')
             ->orderBy('id')
             ->get();
 
         $tasks = $calendar
-            ->filter(fn (DayTask $task) => $task->date->lessThanOrEqualTo($monthEnd))
+            ->filter(fn (DayTask $task) => $task->date->greaterThanOrEqualTo($start) && $task->date->lessThanOrEqualTo($monthEnd))
             ->groupBy(fn (DayTask $task) => $task->date->toDateString());
 
         $upcoming = $calendar
-            ->filter(fn (DayTask $task) => $task->date->greaterThan($monthEnd) && ! $task->is_done)
+            ->filter(fn (DayTask $task) => $task->date->greaterThan($monthEnd) && $task->date->lessThanOrEqualTo($start->addMonth()->endOfMonth()) && ! $task->is_done)
             ->values();
+
+        $todayTasks = $calendar
+            ->filter(fn (DayTask $task) => $task->kind === 'task' && $task->date->toDateString() === $todayKey)
+            ->values();
+
+        $activityLogs = TaskActivityLog::query()->latest()->limit(30)->get();
 
         $currentUser = $request->attributes->get('rosterUser');
 
@@ -58,6 +70,8 @@ class RosterController extends Controller
             'entries' => $entries,
             'tasks' => $tasks,
             'upcoming' => $upcoming,
+            'todayTasks' => $todayTasks,
+            'activityLogs' => $activityLogs,
             'leadingBlankDays' => $start->dayOfWeekIso - 1,
         ]);
     }

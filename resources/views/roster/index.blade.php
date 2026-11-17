@@ -29,6 +29,14 @@
         $chipFor = fn ($kind) => $kind === 'event'
             ? 'bg-primary-container text-on-primary-container'
             : ($kind === 'holiday' ? 'bg-error-container text-on-error-container' : 'bg-success-container text-on-success-container');
+        $today = \Carbon\CarbonImmutable::now()->startOfDay();
+        $activityLabels = [
+            'added' => 'Added',
+            'edited' => 'Edited',
+            'completed' => 'Completed',
+            'uncompleted' => 'Uncompleted',
+            'removed' => 'Removed',
+        ];
     @endphp
 
     <div x-data="rosterPage(@js([
@@ -37,12 +45,12 @@
         'taskDateLabel' => old('date', ''),
         'taskKind' => old('kind', 'task'),
         'taskTitle' => old('title', ''),
+        'today' => $today->toDateString(),
+        'actorName' => $currentUser->name,
     ]))">
         @php
-            $today = \Carbon\CarbonImmutable::now()->startOfDay();
             $todayInMonth = $today->betweenIncluded($start, $start->endOfMonth());
             $todayKey = $today->toDateString();
-            $todayTasks = $tasks[$todayKey] ?? collect();
             $statusNames = [
                 'SHIFT' => 'Working',
                 'OFF' => 'Off',
@@ -75,7 +83,6 @@
                 </div>
             @endif
         </div>
-        <p class="mb-4 text-sm text-on-surface-variant">The IT manager edits any schedule directly. Everyone else asks through Requests. Leave left: <span class="font-medium text-on-surface">{{ $currentUser->al_balance }} annual</span> · <span class="font-medium text-on-surface">{{ $currentUser->dp_balance }} day pending</span>.</p>
 
         <section>
         <h2 class="mb-3 text-sm font-medium">Shift Roster</h2>
@@ -200,8 +207,7 @@
         @endif
 
         <section class="mt-6">
-            <h2 class="text-base font-medium">Calendar & Tasks</h2>
-            <p class="mt-1 mb-3 text-sm text-on-surface-variant">Hover or tap a date, then Add. Tap an item to edit, remove, or mark a task complete.</p>
+            <h2 class="mb-3 text-base font-medium">Calendar & Tasks</h2>
             @php
                 $monthHolidays = collect($tasks)->flatten(1)->where('kind', 'holiday')->sortBy('date');
             @endphp
@@ -287,9 +293,52 @@
             </div>
             </div>
 
+            <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-[#1E1F23]">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="text-base font-medium">{{ "Today's Tasks" }}</h3>
+                    <div class="flex items-center gap-1">
+                        <button type="button" class="btn-text state-layer h-9 px-3 text-sm" x-on:click="activityOpen = true">
+                            <x-icon name="history" class="text-[18px]" />
+                            Activity Log
+                        </button>
+                        <button type="button" class="btn-tonal state-layer h-9 px-3 text-sm" x-on:click="openTask(@js($today->toDateString()), @js($today->format('l, j F Y')))">+ Add task</button>
+                    </div>
+                </div>
+                <ul data-today-tasks class="mt-3 space-y-2">
+                    @forelse($todayTasks as $task)
+                        @php
+                            $byline = collect([
+                                $task->created_by_name ? 'Added by '.$task->created_by_name : null,
+                                $task->updated_by_name ? 'Edited by '.$task->updated_by_name : null,
+                            ])->filter()->implode(' · ');
+                        @endphp
+                        <li data-today-task="{{ $task->id }}" data-date="{{ $task->date->toDateString() }}" class="flex items-start gap-2 rounded-xl px-1 py-1">
+                            <input type="checkbox" class="m3-check mt-1" @checked($task->is_done) aria-label="Mark {{ $task->title }} complete" x-on:change="toggleTodayTask($event.target)">
+                            <div class="min-w-0 flex-1">
+                                <button
+                                    type="button"
+                                    data-task-id="{{ $task->id }}"
+                                    data-task-title
+                                    class="w-full text-left text-sm font-medium break-words {{ $task->is_done ? 'line-through opacity-60' : '' }}"
+                                    x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $today->format('l, j F Y'), 'title' => $task->title, 'kind' => 'task', 'done' => (bool) $task->is_done]))"
+                                >{{ $task->title }}</button>
+                                <p data-task-byline class="text-xs text-on-surface-variant" @if($byline === '') hidden @endif>{{ $byline }}</p>
+                            </div>
+                            <button type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-on-surface-variant hover:bg-surface-high" aria-label="Edit {{ $task->title }}" x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $today->format('l, j F Y'), 'title' => $task->title, 'kind' => 'task', 'done' => (bool) $task->is_done]))">
+                                <x-icon name="edit" class="text-[18px]" />
+                            </button>
+                            <button type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-error hover:bg-error-container" aria-label="Remove {{ $task->title }}" x-on:click="removeTodayTask(@js($task->id))">
+                                <x-icon name="delete" class="text-[18px]" />
+                            </button>
+                        </li>
+                    @empty
+                        <li data-today-empty class="text-sm text-on-surface-variant">No tasks for today.</li>
+                    @endforelse
+                </ul>
+            </section>
+
             <div class="m3-card mt-6">
                 <h3 class="text-base font-medium">Upcoming</h3>
-                <p class="mt-1 text-sm text-on-surface-variant">Events, tasks, and public holidays in {{ $next->format('F Y') }}.</p>
                 @if($upcoming->isEmpty())
                     <p class="mt-3 text-sm text-on-surface-variant">Nothing in {{ $next->format('F Y') }}.</p>
                 @else
@@ -395,6 +444,27 @@
                 </form>
                 <div x-show="taskEditing" x-cloak class="mt-2">
                     <button type="button" class="btn-text state-layer w-full text-error" x-on:click="deleteTask">Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="activityOpen" x-cloak class="m3-scrim" x-on:click.self="activityOpen = false" x-on:keydown.escape.window="activityOpen = false">
+            <div class="m3-sheet sm:max-w-md">
+                <div class="m3-handle"></div>
+                <h2 class="text-[22px] leading-7">Activity Log</h2>
+                <ul data-activity-log class="mt-4 max-h-80 space-y-1 overflow-y-auto">
+                    @forelse($activityLogs as $log)
+                        <li class="border-b border-slate-100 py-2 text-sm last:border-0 dark:border-slate-800">
+                            <span class="font-medium">{{ $activityLabels[$log->action] ?? ucfirst($log->action) }}</span>
+                            <span class="text-on-surface-variant"> · {{ $log->task_title }}</span>
+                            <span class="mt-0.5 block text-xs text-on-surface-variant">{{ $log->actor_name }} · {{ $log->created_at?->timezone(config('app.timezone'))->format('j M Y, H:i') }}</span>
+                        </li>
+                    @empty
+                        <li data-activity-empty class="text-sm text-on-surface-variant">No activity yet.</li>
+                    @endforelse
+                </ul>
+                <div class="mt-4 flex justify-end">
+                    <button type="button" class="btn-text state-layer" x-on:click="activityOpen = false">Close</button>
                 </div>
             </div>
         </div>

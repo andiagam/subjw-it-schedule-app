@@ -159,4 +159,94 @@ class DayTaskTest extends TestCase
             'note' => 'Booked',
         ]);
     }
+
+    public function test_task_changes_keep_an_activity_trail_for_every_role(): void
+    {
+        Carbon::setTestNow('2026-11-17 09:30:00');
+        $staff = User::factory()->create(['name' => 'Bintang', 'username' => 'tnbin839']);
+        $trainee = User::factory()->create([
+            'name' => 'Kholis',
+            'username' => 'trainee1',
+            'role' => 'IT Trainee',
+        ]);
+
+        $this->actingAsRoster($trainee)
+            ->get(route('roster.index'))
+            ->assertOk()
+            ->assertSee("Today's Tasks")
+            ->assertSee('+ Add task')
+            ->assertSee('Activity Log')
+            ->assertSee('No tasks for today.');
+
+        $this->actingAsRoster($staff)->post(route('roster.tasks.store'), [
+            'date' => '2026-11-17',
+            'title' => 'Replace switch',
+            'kind' => 'task',
+        ])->assertRedirect();
+
+        $task = DayTask::query()->where('title', 'Replace switch')->first();
+        $this->assertSame('Bintang', $task->created_by_name);
+        $this->assertDatabaseHas('task_activity_logs', [
+            'day_task_id' => $task->id,
+            'task_title' => 'Replace switch',
+            'task_date' => '2026-11-17',
+            'action' => 'added',
+            'actor_name' => 'Bintang',
+            'actor_username' => 'tnbin839',
+        ]);
+
+        $this->actingAsRoster($trainee)->put(route('roster.tasks.update', $task), [
+            'date' => '2026-11-17',
+            'title' => 'Replace the switch',
+            'kind' => 'task',
+            'is_done' => '0',
+        ])->assertRedirect();
+
+        $this->assertSame('Kholis', $task->refresh()->updated_by_name);
+        $this->assertDatabaseHas('task_activity_logs', [
+            'day_task_id' => $task->id,
+            'action' => 'edited',
+            'actor_name' => 'Kholis',
+        ]);
+
+        $this->actingAsRoster($staff)->putJson(route('roster.tasks.update', $task), [
+            'date' => '2026-11-17',
+            'title' => 'Replace the switch',
+            'kind' => 'task',
+            'is_done' => true,
+        ])->assertOk()
+            ->assertJsonPath('activity.0.action', 'completed')
+            ->assertJsonPath('activity.0.actor_name', 'Bintang');
+
+        $this->actingAsRoster($staff)
+            ->get(route('roster.index'))
+            ->assertOk()
+            ->assertSee('Replace the switch')
+            ->assertSee('Added by Bintang · Edited by Kholis')
+            ->assertSee('Completed');
+
+        $this->actingAsRoster($trainee)
+            ->deleteJson(route('roster.tasks.destroy', $task))
+            ->assertOk()
+            ->assertJsonPath('activity.0.action', 'removed');
+
+        $this->assertDatabaseMissing('day_tasks', ['id' => $task->id]);
+        $this->assertDatabaseHas('task_activity_logs', [
+            'day_task_id' => null,
+            'task_title' => 'Replace the switch',
+            'action' => 'removed',
+            'actor_name' => 'Kholis',
+            'actor_username' => 'trainee1',
+        ]);
+
+        $this->actingAsRoster($staff)->post(route('roster.tasks.store'), [
+            'date' => '2026-11-18',
+            'title' => 'Team lunch',
+            'kind' => 'event',
+        ])->assertRedirect();
+
+        $this->assertDatabaseMissing('task_activity_logs', [
+            'task_title' => 'Team lunch',
+        ]);
+    }
 }

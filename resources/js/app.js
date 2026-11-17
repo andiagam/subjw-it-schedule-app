@@ -37,6 +37,9 @@ document.addEventListener('alpine:init', () => {
         taskDateLabel: initial.taskDateLabel || '',
         taskKind: initial.taskKind || 'task',
         taskTitle: initial.taskTitle || '',
+        activityOpen: false,
+        today: initial.today || '',
+        actorName: initial.actorName || '',
         addHint: '',
         init() {
             this.$nextTick(() => {
@@ -161,6 +164,7 @@ document.addEventListener('alpine:init', () => {
                 this.paintTask(id, payload);
             } else {
                 this.insertPendingTask(payload);
+                this.insertTodayTask(payload);
             }
 
             this.taskOpen = false;
@@ -179,6 +183,14 @@ document.addEventListener('alpine:init', () => {
 
                 if (!editing && data.task) {
                     this.stampPendingTask(data.task);
+                }
+
+                this.noteActivity(data.activity);
+                this.applyByline(editing ? id : data.task?.id, data.task);
+
+                if (data.task && (data.task.kind !== 'task' || data.task.date !== this.today)) {
+                    document.querySelector(`[data-today-task="${CSS.escape(String(data.task.id))}"]`)?.remove();
+                    this.showTodayEmpty();
                 }
 
                 if (data.task?.kind === 'holiday') {
@@ -220,6 +232,9 @@ document.addEventListener('alpine:init', () => {
                 if (!response.ok) {
                     throw new Error(this.errorText(data) || 'That task could not be updated.');
                 }
+
+                this.noteActivity(data.activity);
+                this.applyByline(id, data.task);
             } catch (error) {
                 this.restoreTask(snapshot);
                 this.taskDone = !this.taskDone;
@@ -245,6 +260,9 @@ document.addEventListener('alpine:init', () => {
                 if (!response.ok) {
                     throw new Error(this.errorText(data) || 'That calendar item could not be removed.');
                 }
+
+                this.noteActivity(data.activity);
+                this.showTodayEmpty();
             } catch (error) {
                 removed.forEach(({ parent, next, item }) => {
                     parent.insertBefore(item, next);
@@ -326,28 +344,244 @@ document.addEventListener('alpine:init', () => {
             host.appendChild(button);
         },
         stampPendingTask(task) {
-            const button = document.querySelector('[data-pending-task]');
+            document.querySelectorAll('[data-today-task="pending"]').forEach((row) => {
+                row.dataset.todayTask = String(task.id);
+            });
 
-            if (!button) {
+            document.querySelectorAll('[data-pending-task]').forEach((button) => {
+                button.dataset.taskId = String(task.id);
+                delete button.dataset.pendingTask;
+                button.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    this.openEdit({
+                        id: task.id,
+                        date: task.date,
+                        label: this.taskDateLabel,
+                        title: task.title,
+                        kind: task.kind,
+                        done: Boolean(task.is_done),
+                    });
+                });
+            });
+
+            this.applyByline(task.id, task);
+        },
+        removePendingTask() {
+            [...document.querySelectorAll('[data-pending-task]')].forEach((node) => {
+                (node.closest('[data-today-task]') || node).remove();
+            });
+            this.showTodayEmpty();
+        },
+        insertTodayTask(task) {
+            if (task.kind !== 'task' || task.date !== this.today) {
                 return;
             }
 
-            button.dataset.taskId = String(task.id);
-            delete button.dataset.pendingTask;
-            button.addEventListener('click', (event) => {
-                event.stopPropagation();
+            const list = document.querySelector('[data-today-tasks]');
+
+            if (!list) {
+                return;
+            }
+
+            list.querySelector('[data-today-empty]')?.remove();
+            const row = document.createElement('li');
+            row.dataset.todayTask = 'pending';
+            row.dataset.date = task.date;
+            row.className = 'flex items-start gap-2 rounded-xl px-1 py-1';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'm3-check mt-1';
+            checkbox.setAttribute('aria-label', `Mark ${task.title} complete`);
+            checkbox.addEventListener('change', (event) => this.toggleTodayTask(event.target));
+
+            const copy = document.createElement('div');
+            copy.className = 'min-w-0 flex-1';
+            const title = document.createElement('button');
+            title.type = 'button';
+            title.dataset.taskId = 'pending';
+            title.dataset.pendingTask = '1';
+            title.dataset.taskTitle = '';
+            title.className = 'w-full text-left text-sm font-medium break-words';
+            title.textContent = task.title;
+            const byline = document.createElement('p');
+            byline.dataset.taskByline = '';
+            byline.className = 'text-xs text-on-surface-variant';
+            byline.textContent = this.actorName ? `Added by ${this.actorName}` : '';
+            copy.append(title, byline);
+
+            const edit = document.createElement('button');
+            edit.type = 'button';
+            edit.className = 'grid size-8 shrink-0 place-items-center rounded-full text-on-surface-variant hover:bg-surface-high';
+            edit.setAttribute('aria-label', `Edit ${task.title}`);
+            edit.textContent = 'edit';
+            edit.classList.add('material-symbols-rounded', 'text-[18px]');
+            edit.addEventListener('click', () => {
+                if (row.dataset.todayTask === 'pending') {
+                    return;
+                }
+
                 this.openEdit({
-                    id: task.id,
-                    date: task.date,
+                    id: row.dataset.todayTask,
+                    date: row.dataset.date,
                     label: this.taskDateLabel,
-                    title: task.title,
-                    kind: task.kind,
-                    done: Boolean(task.is_done),
+                    title: title.textContent,
+                    kind: 'task',
+                    done: checkbox.checked,
                 });
             });
+
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'grid size-8 shrink-0 place-items-center rounded-full text-error hover:bg-error-container material-symbols-rounded text-[18px]';
+            remove.setAttribute('aria-label', `Remove ${task.title}`);
+            remove.textContent = 'delete';
+            remove.addEventListener('click', () => {
+                if (row.dataset.todayTask !== 'pending') {
+                    this.removeTodayTask(row.dataset.todayTask);
+                }
+            });
+
+            row.append(checkbox, copy, edit, remove);
+            list.appendChild(row);
         },
-        removePendingTask() {
-            document.querySelector('[data-pending-task]')?.remove();
+        async toggleTodayTask(input) {
+            const row = input.closest('[data-today-task]');
+
+            if (!row || row.dataset.todayTask === 'pending') {
+                input.checked = false;
+
+                return;
+            }
+
+            const id = row.dataset.todayTask;
+            const title = row.querySelector('[data-task-title]')?.textContent?.trim() || '';
+            const done = input.checked;
+            const snapshot = this.snapshotTask(id);
+            this.paintTask(id, { title, kind: 'task', is_done: done });
+
+            try {
+                const response = await fetch(`/roster/tasks/${id}`, {
+                    method: 'PUT',
+                    headers: this.jsonHeaders(),
+                    body: JSON.stringify({
+                        date: row.dataset.date,
+                        title,
+                        kind: 'task',
+                        is_done: done,
+                    }),
+                });
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(this.errorText(data) || 'That task could not be updated.');
+                }
+
+                this.noteActivity(data.activity);
+                this.applyByline(id, data.task);
+            } catch (error) {
+                this.restoreTask(snapshot);
+                input.checked = !done;
+                this.toast(error.message || 'That task could not be updated.', 'error');
+            }
+        },
+        async removeTodayTask(id) {
+            if (!confirm('Remove this task?')) {
+                return;
+            }
+
+            const removed = this.removeTask(id);
+            this.showTodayEmpty();
+
+            try {
+                const response = await fetch(`/roster/tasks/${id}`, {
+                    method: 'DELETE',
+                    headers: this.jsonHeaders(),
+                });
+                const data = await response.json().catch(() => ({}));
+
+                if (!response.ok) {
+                    throw new Error(this.errorText(data) || 'That task could not be removed.');
+                }
+
+                this.noteActivity(data.activity);
+            } catch (error) {
+                removed.forEach(({ parent, next, item }) => {
+                    parent.insertBefore(item, next);
+                });
+                document.querySelector('[data-today-empty]')?.remove();
+                this.toast(error.message || 'That task could not be removed.', 'error');
+            }
+        },
+        showTodayEmpty() {
+            const list = document.querySelector('[data-today-tasks]');
+
+            if (!list || list.querySelector('[data-today-task]') || list.querySelector('[data-today-empty]')) {
+                return;
+            }
+
+            const empty = document.createElement('li');
+            empty.dataset.todayEmpty = '';
+            empty.className = 'text-sm text-on-surface-variant';
+            empty.textContent = 'No tasks for today.';
+            list.appendChild(empty);
+        },
+        noteActivity(activity) {
+            const items = Array.isArray(activity) ? activity : [];
+            const list = document.querySelector('[data-activity-log]');
+
+            if (!list || items.length === 0) {
+                return;
+            }
+
+            const labels = {
+                added: 'Added',
+                edited: 'Edited',
+                completed: 'Completed',
+                uncompleted: 'Uncompleted',
+                removed: 'Removed',
+            };
+
+            list.querySelector('[data-activity-empty]')?.remove();
+            items.forEach((entry) => {
+                const item = document.createElement('li');
+                item.className = 'border-b border-slate-100 py-2 text-sm last:border-0 dark:border-slate-800';
+                const action = document.createElement('span');
+                action.className = 'font-medium';
+                action.textContent = labels[entry.action] || entry.action;
+                const title = document.createElement('span');
+                title.className = 'text-on-surface-variant';
+                title.textContent = ` · ${entry.task_title}`;
+                const meta = document.createElement('span');
+                meta.className = 'mt-0.5 block text-xs text-on-surface-variant';
+                meta.textContent = `${entry.actor_name} · ${entry.when}`;
+                item.append(action, title, meta);
+                list.prepend(item);
+            });
+        },
+        applyByline(id, task) {
+            if (!id || !task) {
+                return;
+            }
+
+            const byline = document.querySelector(`[data-today-task="${CSS.escape(String(id))}"] [data-task-byline]`);
+
+            if (!byline) {
+                return;
+            }
+
+            const parts = [];
+
+            if (task.created_by_name) {
+                parts.push(`Added by ${task.created_by_name}`);
+            }
+
+            if (task.updated_by_name) {
+                parts.push(`Edited by ${task.updated_by_name}`);
+            }
+
+            byline.textContent = parts.join(' · ');
+            byline.hidden = parts.length === 0;
         },
         removeTask(id) {
             return [...document.querySelectorAll(`[data-task-id="${CSS.escape(String(id))}"]`)].map((node) => {

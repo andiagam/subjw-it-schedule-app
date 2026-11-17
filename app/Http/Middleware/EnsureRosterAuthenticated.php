@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureRosterAuthenticated
@@ -25,6 +26,7 @@ class EnsureRosterAuthenticated
         }
 
         $request->attributes->set('rosterUser', $user);
+        Auth::setUser($user);
 
         return $next($request);
     }
