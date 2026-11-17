@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\Role;
 use App\Models\User;
 use App\Support\Pin;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -60,7 +61,10 @@ class TeamController extends Controller
             return back()->with('error', 'The last active manager cannot be archived.');
         }
 
-        $user->update(['is_active' => false]);
+        $user->forceFill([
+            'is_active' => false,
+            'end_date' => $user->end_date?->toDateString() ?? CarbonImmutable::now('Asia/Jakarta')->toDateString(),
+        ])->save();
 
         return redirect()->route('team.index')->with('status', $user->name.' archived.');
     }

@@ -77,7 +77,7 @@ class RosterService
     public function isVisibleInMonth(User $user, CarbonImmutable $start): bool
     {
         if (! $user->is_active && $user->end_date === null) {
-            return true;
+            return $start->lt(CarbonImmutable::now('Asia/Jakarta')->startOfMonth());
         }
 
         $monthStart = $start->toDateString();
@@ -95,9 +95,14 @@ class RosterService
     {
         $monthStart = $start->toDateString();
         $monthEnd = $start->endOfMonth()->toDateString();
-        $history = RosterEntry::query()
-            ->whereBetween('date', [$monthStart, $monthEnd])
-            ->select('user_id');
+        $history = null;
+
+        if ($start->lt(CarbonImmutable::now('Asia/Jakarta')->startOfMonth())) {
+            $history = RosterEntry::query()
+                ->whereBetween('date', [$monthStart, $monthEnd])
+                ->whereIn('status', ['SHIFT', 'OFF', 'AL', 'DP', 'SL', 'BLACK'])
+                ->select('user_id');
+        }
 
         return User::query()->where(function (Builder $query) use ($monthStart, $monthEnd, $history): void {
             $query->where(function (Builder $employed) use ($monthStart, $monthEnd): void {
@@ -111,12 +116,16 @@ class RosterService
                     ->where(function (Builder $visible): void {
                         $visible->where('is_active', true)->orWhereNotNull('end_date');
                     });
-            })->orWhere(function (Builder $archived) use ($history): void {
-                $archived
-                    ->where('is_active', false)
-                    ->whereNull('end_date')
-                    ->whereIn('id', $history);
             });
+
+            if ($history !== null) {
+                $query->orWhere(function (Builder $archived) use ($history): void {
+                    $archived
+                        ->where('is_active', false)
+                        ->whereNull('end_date')
+                        ->whereIn('id', $history);
+                });
+            }
         });
     }
 
@@ -380,9 +389,7 @@ class RosterService
         }
 
         $users = User::query()
-            ->where(function (Builder $query): void {
-                $query->where('is_active', true)->orWhereNotNull('end_date');
-            })
+            ->where('is_active', true)
             ->get(['id', 'is_active', 'start_date', 'end_date']);
 
         if ($users->isEmpty()) {
@@ -404,6 +411,10 @@ class RosterService
             $startDate = $user->start_date?->toDateString();
             $endDate = $user->end_date?->toDateString();
 
+            if (! $user->is_active) {
+                continue;
+            }
+
             foreach ($dates as $date) {
                 if ($startDate !== null && $date < $startDate) {
                     continue;
@@ -415,7 +426,7 @@ class RosterService
 
                 $entry = $byKey->get($user->id.'|'.$date);
 
-                if ($entry && in_array($entry->status, $preserve, true)) {
+                if ($entry && ($entry->status === 'BLACK' || in_array($entry->status, $preserve, true))) {
                     continue;
                 }
 

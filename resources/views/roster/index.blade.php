@@ -81,6 +81,10 @@
             $todayGroups = [];
             if ($todayInMonth) {
                 foreach ($users as $person) {
+                    if ($person->employmentHasEnded($today) || ($person->start_date !== null && $person->start_date->toDateString() > $todayKey)) {
+                        continue;
+                    }
+
                     $todayEntry = $entries->get($person->id.'|'.$todayKey);
                     $key = $todayEntry->status ?? 'EMPTY';
                     if ($key === 'BLACK') {
