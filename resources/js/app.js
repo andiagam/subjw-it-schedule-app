@@ -86,6 +86,10 @@ document.addEventListener('alpine:init', () => {
             window.addEventListener('pointercancel', this.onPointerUp);
         },
         startDrag(event) {
+            if (event.pointerType && event.pointerType !== 'mouse') {
+                return;
+            }
+
             if (event.button !== undefined && event.button !== 0) {
                 return;
             }

@@ -118,8 +118,8 @@
             @endforeach
         </div>
 
-        <div data-month-board data-roster-scroll class="relative z-0 m3-card max-h-[70vh] overflow-auto !p-0">
-            <table class="min-w-max border-separate border-spacing-0 text-xs">
+        <div data-month-board data-roster-scroll class="relative z-0 m3-card w-full max-h-[70vh] overflow-x-auto overflow-y-auto overscroll-x-contain !p-0" style="-webkit-overflow-scrolling: touch;">
+            <table class="min-w-max w-full border-separate border-spacing-0 text-xs">
                 <thead>
                     <tr>
                         <th class="sticky top-0 left-0 z-30 w-36 min-w-36 border-r-2 border-b border-slate-300 bg-white px-3 py-2 text-left dark:border-slate-600 dark:bg-[#1E1F23] sm:w-48">Employee</th>

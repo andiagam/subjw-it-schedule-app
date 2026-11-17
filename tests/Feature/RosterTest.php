@@ -421,7 +421,11 @@ class RosterTest extends TestCase
             ->get(route('roster.index', ['month' => 11, 'year' => 2026]))
             ->assertOk()
             ->assertSee('Black shift (Ended)')
-            ->assertSee('Multi-select');
+            ->assertSee('Multi-select')
+            ->assertSee('overflow-x-auto overflow-y-auto overscroll-x-contain', false)
+            ->assertSee('-webkit-overflow-scrolling: touch', false)
+            ->assertDontSee('touch-action: none', false)
+            ->assertDontSee('touch-none', false);
 
         $this->assertDoesNotMatchRegularExpression('/Working:<\/span>[^<]*Bernard/', $page->getContent());
         $this->assertDoesNotMatchRegularExpression('/Not set:<\/span>[^<]*Bernard/', $page->getContent());
