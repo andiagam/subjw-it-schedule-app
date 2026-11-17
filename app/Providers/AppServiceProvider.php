@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Enums\Role;
 use App\Models\LeaveRequest;
 use App\Models\User;
 use Illuminate\Support\Facades\View;
@@ -36,7 +37,7 @@ class AppServiceProvider extends ServiceProvider
 
             $impersonatorId = session('impersonator_id');
             $impersonator = $impersonatorId
-                ? User::query()->whereKey($impersonatorId)->where('is_active', true)->where('role', 'MANAGER')->first()
+                ? User::query()->whereKey($impersonatorId)->where('is_active', true)->where('role', Role::Manager->value)->first()
                 : null;
 
             $canSwitch = ($user?->isManager() && $impersonator === null) || $impersonator !== null;
@@ -46,7 +47,7 @@ class AppServiceProvider extends ServiceProvider
                 'impersonator' => $impersonator,
                 'canSwitchUser' => $canSwitch,
                 'switchUsers' => $canSwitch
-                    ? User::query()->where('is_active', true)->orderBy('name')->get()
+                    ? User::query()->where('is_active', true)->orderedByHierarchy()->get()
                     : collect(),
                 'pendingRequestCount' => $user?->isManager()
                     ? LeaveRequest::query()->where('status', 'PENDING')->count()

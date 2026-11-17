@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -88,7 +89,7 @@ class AuthController extends Controller
         return User::query()
             ->whereKey($id)
             ->where('is_active', true)
-            ->where('role', 'MANAGER')
+            ->where('role', Role::Manager->value)
             ->first();
     }
 }

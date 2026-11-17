@@ -238,7 +238,7 @@ class RosterTest extends TestCase
 
         $this->assertDatabaseHas('users', [
             'username' => 'manager',
-            'role' => 'MANAGER',
+            'role' => 'IT Manager',
             'pin' => '1234',
             'al_balance' => 12,
             'dp_balance' => 2,

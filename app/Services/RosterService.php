@@ -51,8 +51,7 @@ class RosterService
     {
         return User::query()
             ->where('is_active', true)
-            ->orderByRaw("case when role = 'MANAGER' then 0 else 1 end")
-            ->orderBy('name')
+            ->orderedByHierarchy()
             ->get();
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,8 +16,7 @@ class TeamController extends Controller
         return view('team.index', [
             'members' => User::query()
                 ->where('is_active', true)
-                ->orderByRaw("case when role = 'MANAGER' then 0 else 1 end")
-                ->orderBy('name')
+                ->orderedByHierarchy()
                 ->get(),
         ]);
     }
@@ -37,7 +37,7 @@ class TeamController extends Controller
     {
         $data = $this->validated($request, $user);
 
-        if ($user->isManager() && $data['role'] !== 'MANAGER' && $this->otherActiveManagers($user) < 1) {
+        if ($user->isManager() && $data['role'] !== Role::Manager->value && $this->otherActiveManagers($user) < 1) {
             return back()->with('error', 'Assign another active manager before changing this role.')->withInput();
         }
 
@@ -72,7 +72,7 @@ class TeamController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'username' => ['required', 'string', 'max:50', 'alpha_dash', Rule::unique('users', 'username')->ignore($user?->id)],
             'job_title' => ['required', 'string', 'max:120'],
-            'role' => ['required', Rule::in(['MANAGER', 'STAFF'])],
+            'role' => ['required', Rule::enum(Role::class)],
             'pin' => ['required', 'digits:4'],
             'al_balance' => ['required', 'integer', 'min:0', 'max:999'],
             'dp_balance' => ['required', 'integer', 'min:0', 'max:999'],
@@ -89,7 +89,7 @@ class TeamController extends Controller
     private function otherActiveManagers(User $user): int
     {
         return User::query()
-            ->where('role', 'MANAGER')
+            ->where('role', Role::Manager->value)
             ->where('is_active', true)
             ->whereKeyNot($user->id)
             ->count();

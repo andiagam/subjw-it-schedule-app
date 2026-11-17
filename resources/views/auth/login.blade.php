@@ -3,23 +3,18 @@
 @section('title', 'Sign in')
 
 @section('content')
-    <div class="mx-auto max-w-md">
-        <div class="rounded-2xl border border-line bg-surface p-6 shadow-sm">
-            <h1 class="text-xl font-semibold tracking-tight">Sign in</h1>
-            <p class="mt-1 text-sm text-faint">Use your username and 4-digit PIN.</p>
-
-            <form method="POST" action="{{ route('login') }}" class="mt-6 space-y-4">
-                @csrf
-                <label class="block text-sm">
-                    <span class="mb-1 block font-medium text-muted">Username</span>
-                    <input type="text" name="username" value="{{ old('username') }}" required autofocus autocomplete="username" class="min-h-11 w-full rounded-lg border border-line bg-field px-3 py-2 shadow-sm focus:border-faint focus:outline-none focus:ring-2 focus:ring-line">
-                </label>
-                <label class="block text-sm">
-                    <span class="mb-1 block font-medium text-muted">PIN</span>
-                    <input type="password" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required autocomplete="current-password" class="min-h-11 w-full rounded-lg border border-line bg-field px-3 py-2 tracking-[0.4em] shadow-sm focus:border-faint focus:outline-none focus:ring-2 focus:ring-line">
-                </label>
-                <button type="submit" class="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-button px-4 text-sm font-semibold text-button-ink hover:bg-white">Sign in</button>
-            </form>
+    <div class="m3-card w-full" style="--field-notch: var(--md-surface-container-low)">
+        <div class="mb-6 grid size-14 place-items-center rounded-2xl bg-primary-container text-on-primary-container">
+            <x-icon name="event_available" filled />
         </div>
+        <h1 class="text-[28px] leading-9">Sign in</h1>
+        <p class="mt-1 text-sm text-on-surface-variant">Use your username and 4-digit PIN.</p>
+
+        <form method="POST" action="{{ route('login') }}" class="mt-8 space-y-5">
+            @csrf
+            <x-field label="Username" type="text" name="username" value="{{ old('username') }}" required autofocus autocomplete="username" />
+            <x-field label="PIN" type="password" name="pin" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" required autocomplete="current-password" class="tracking-[0.4em]" />
+            <button type="submit" class="btn-filled state-layer mt-2 w-full">Sign in</button>
+        </form>
     </div>
 @endsection

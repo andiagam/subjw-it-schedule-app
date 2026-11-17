@@ -18,7 +18,7 @@ class TeamTest extends TestCase
             'name' => 'New Hire',
             'username' => 'newhire',
             'job_title' => 'IT Trainee',
-            'role' => 'STAFF',
+            'role' => 'IT Trainee',
             'pin' => '4444',
             'al_balance' => 6,
             'dp_balance' => 0,
@@ -32,7 +32,7 @@ class TeamTest extends TestCase
             'name' => 'New Hire',
             'username' => 'newhire',
             'job_title' => 'IT Officer',
-            'role' => 'STAFF',
+            'role' => 'IT Staff',
             'pin' => '5555',
             'al_balance' => 20,
             'dp_balance' => 3,
@@ -82,12 +82,67 @@ class TeamTest extends TestCase
             'name' => $manager->name,
             'username' => $manager->username,
             'job_title' => $manager->job_title,
-            'role' => 'STAFF',
+            'role' => 'IT Staff',
             'pin' => $manager->pin,
             'al_balance' => $manager->al_balance,
             'dp_balance' => $manager->dp_balance,
         ])->assertSessionHas('error');
 
-        $this->assertSame('MANAGER', $manager->refresh()->role);
+        $this->assertSame('IT Manager', $manager->refresh()->role);
+    }
+
+    public function test_existing_roles_keep_leave_balances_and_lists_follow_the_hierarchy(): void
+    {
+        $manager = User::factory()->create([
+            'name' => 'Mia',
+            'username' => 'mia',
+            'job_title' => 'IT Manager',
+            'role' => 'MANAGER',
+            'al_balance' => 12,
+            'dp_balance' => 2,
+        ]);
+        $officer = User::factory()->create([
+            'name' => 'Zoe',
+            'username' => 'zoe',
+            'job_title' => 'IT Officer',
+            'role' => 'STAFF',
+            'al_balance' => 12,
+            'dp_balance' => 1,
+        ]);
+        $trainee = User::factory()->create([
+            'name' => 'Kholis',
+            'username' => 'trainee1',
+            'job_title' => 'IT Trainee',
+            'role' => 'STAFF',
+            'al_balance' => 6,
+            'dp_balance' => 0,
+        ]);
+
+        \App\Support\RoleMigrator::apply();
+
+        $manager->refresh();
+        $officer->refresh();
+        $trainee->refresh();
+        $this->assertSame('IT Manager', $manager->role);
+        $this->assertSame(12, $manager->al_balance);
+        $this->assertSame(2, $manager->dp_balance);
+        $this->assertSame('IT Staff', $officer->role);
+        $this->assertSame(1, $officer->dp_balance);
+        $this->assertSame('IT Trainee', $trainee->role);
+        $this->assertSame(6, $trainee->al_balance);
+        $this->assertSame(0, $trainee->dp_balance);
+
+        $this->actingAsRoster($manager)
+            ->get(route('team.index'))
+            ->assertOk()
+            ->assertSeeInOrder(['IT Manager', 'IT Staff', 'IT Trainee', 'Mia', 'Zoe', 'Kholis']);
+
+        $this->actingAsRoster($manager)
+            ->get(route('roster.index'))
+            ->assertOk()
+            ->assertSeeInOrder(['Mia', 'Zoe', 'Kholis']);
+
+        $this->actingAsRoster($trainee)->get(route('team.index'))->assertForbidden();
+        $this->actingAsRoster($trainee)->get(route('roster.index'))->assertOk();
     }
 }

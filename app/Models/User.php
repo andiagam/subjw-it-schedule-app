@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\Role;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -50,6 +52,18 @@ class User extends Authenticatable
 
     public function isManager(): bool
     {
-        return $this->role === 'MANAGER';
+        return $this->role === Role::Manager->value;
+    }
+
+    /**
+     * @param  Builder<User>  $query
+     * @return Builder<User>
+     */
+    public function scopeOrderedByHierarchy(Builder $query): Builder
+    {
+        return $query
+            ->orderByRaw(Role::orderSql())
+            ->orderBy('name')
+            ->orderBy('username');
     }
 }

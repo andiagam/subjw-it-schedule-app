@@ -3,12 +3,12 @@ import Alpine from 'alpinejs';
 window.Alpine = Alpine;
 
 const badgeClass = {
-    SHIFT: 'bg-emerald-100 text-emerald-800',
-    OFF: 'bg-zinc-200 text-zinc-800',
-    AL: 'bg-amber-100 text-amber-900',
-    DP: 'bg-indigo-100 text-indigo-800',
-    SL: 'bg-pink-100 text-pink-800',
-    PH: 'bg-rose-200 text-rose-900',
+    SHIFT: 'badge-shift',
+    OFF: 'badge-off',
+    AL: 'badge-al',
+    DP: 'badge-dp',
+    SL: 'badge-sl',
+    PH: 'badge-ph',
 };
 
 const statusLabel = {
@@ -37,6 +37,7 @@ document.addEventListener('alpine:init', () => {
         taskDateLabel: initial.taskDateLabel || '',
         taskKind: initial.taskKind || 'task',
         taskTitle: initial.taskTitle || '',
+        addHint: '',
         init() {
             this.$nextTick(() => {
                 const board = this.$root.querySelector('[data-month-board]');
@@ -114,8 +115,17 @@ document.addEventListener('alpine:init', () => {
                 if (button) {
                     button.dataset.status = data.entry.status;
                     const label = statusLabel[data.entry.status] || data.entry.status;
-                    button.className = `flex h-full min-h-12 w-full items-center justify-center text-xs font-bold tracking-wide hover:brightness-95 ${badgeClass[data.entry.status] || ''}`;
-                    button.textContent = label;
+                    let badge = button.querySelector('[data-badge]');
+
+                    if (!badge) {
+                        button.textContent = '';
+                        badge = document.createElement('span');
+                        badge.dataset.badge = '';
+                        button.appendChild(badge);
+                    }
+
+                    badge.className = `roster-badge ${badgeClass[data.entry.status] || ''}`;
+                    badge.textContent = label;
                 }
 
                 this.open = false;

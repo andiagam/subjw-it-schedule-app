@@ -21,7 +21,7 @@ class UserFactory extends Factory
             'name' => fake()->name(),
             'username' => 'user'.fake()->unique()->numerify('####'),
             'job_title' => fake()->jobTitle(),
-            'role' => 'STAFF',
+            'role' => 'IT Staff',
             'pin' => '1234',
             'al_balance' => 12,
             'dp_balance' => 0,
@@ -32,7 +32,7 @@ class UserFactory extends Factory
     public function manager(): static
     {
         return $this->state(fn (array $attributes) => [
-            'role' => 'MANAGER',
+            'role' => 'IT Manager',
             'job_title' => 'IT Manager',
         ]);
     }

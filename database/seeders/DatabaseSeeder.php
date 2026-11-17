@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\Role;
 use App\Models\RosterEntry;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -15,10 +16,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $people = [
-            ['name' => 'IT Manager', 'username' => 'manager', 'job_title' => 'IT Manager', 'role' => 'MANAGER', 'pin' => '1234', 'al_balance' => 12, 'dp_balance' => 2],
-            ['name' => 'IT Officer', 'username' => 'officer', 'job_title' => 'IT Officer', 'role' => 'STAFF', 'pin' => '1111', 'al_balance' => 12, 'dp_balance' => 1],
-            ['name' => 'IT Trainee 1', 'username' => 'trainee1', 'job_title' => 'IT Trainee', 'role' => 'STAFF', 'pin' => '2222', 'al_balance' => 6, 'dp_balance' => 0],
-            ['name' => 'IT Trainee 2', 'username' => 'trainee2', 'job_title' => 'IT Trainee', 'role' => 'STAFF', 'pin' => '3333', 'al_balance' => 6, 'dp_balance' => 0],
+            ['name' => 'IT Manager', 'username' => 'manager', 'job_title' => 'IT Manager', 'role' => Role::Manager->value, 'pin' => '1234', 'al_balance' => 12, 'dp_balance' => 2],
+            ['name' => 'IT Officer', 'username' => 'officer', 'job_title' => 'IT Officer', 'role' => Role::Staff->value, 'pin' => '1111', 'al_balance' => 12, 'dp_balance' => 1],
+            ['name' => 'IT Trainee 1', 'username' => 'trainee1', 'job_title' => 'IT Trainee', 'role' => Role::Trainee->value, 'pin' => '2222', 'al_balance' => 6, 'dp_balance' => 0],
+            ['name' => 'IT Trainee 2', 'username' => 'trainee2', 'job_title' => 'IT Trainee', 'role' => Role::Trainee->value, 'pin' => '3333', 'al_balance' => 6, 'dp_balance' => 0],
         ];
 
         $users = collect($people)->map(fn (array $person) => User::query()->create($person));
