@@ -19,11 +19,11 @@ class RosterController extends Controller
 {
     public function index(Request $request, RosterService $roster): View
     {
+        $roster->ensureIndonesianPublicHolidays();
         $start = $roster->monthStart($request->query('month'), $request->query('year'));
         $users = $roster->activeUsers();
         $entries = $roster->entriesForMonth($start);
         $monthEnd = $start->endOfMonth()->toDateString();
-        $today = CarbonImmutable::now()->toDateString();
 
         $tasks = DayTask::query()
             ->with('author')
@@ -33,14 +33,12 @@ class RosterController extends Controller
             ->get()
             ->groupBy(fn (DayTask $task) => $task->date->toDateString());
 
+        $nextMonth = $start->addMonth();
+
         $upcoming = DayTask::query()
             ->with('author')
             ->where('is_done', false)
-            ->whereDate('date', '>=', $today)
-            ->where(function ($query) use ($start, $monthEnd) {
-                $query->whereDate('date', '<', $start->toDateString())
-                    ->orWhereDate('date', '>', $monthEnd);
-            })
+            ->whereBetween('date', [$nextMonth->toDateString(), $nextMonth->endOfMonth()->toDateString()])
             ->orderBy('date')
             ->orderBy('id')
             ->get();

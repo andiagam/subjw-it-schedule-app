@@ -4,7 +4,7 @@ window.Alpine = Alpine;
 
 const badgeClass = {
     SHIFT: 'bg-emerald-100 text-emerald-800',
-    OFF: 'bg-slate-200 text-slate-700',
+    OFF: 'bg-zinc-200 text-zinc-800',
     AL: 'bg-amber-100 text-amber-900',
     DP: 'bg-indigo-100 text-indigo-800',
     SL: 'bg-pink-100 text-pink-800',
@@ -19,14 +19,6 @@ const statusLabel = {
     SL: 'SL',
     PH: 'PH',
 };
-
-function escapeHtml(value) {
-    return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;');
-}
 
 document.addEventListener('alpine:init', () => {
     Alpine.data('rosterPage', (initial = {}) => ({
@@ -122,7 +114,8 @@ document.addEventListener('alpine:init', () => {
                 if (button) {
                     button.dataset.status = data.entry.status;
                     const label = statusLabel[data.entry.status] || data.entry.status;
-                    button.innerHTML = `<span class="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${badgeClass[data.entry.status] || ''}">${escapeHtml(label)}</span>`;
+                    button.className = `flex h-full min-h-12 w-full items-center justify-center text-xs font-bold tracking-wide hover:brightness-95 ${badgeClass[data.entry.status] || ''}`;
+                    button.textContent = label;
                 }
 
                 this.open = false;

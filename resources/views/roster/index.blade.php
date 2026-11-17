@@ -93,13 +93,8 @@
             </section>
         @endif
 
-        <div class="mb-4 flex flex-col gap-3 rounded-2xl border border-line bg-surface p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <a href="{{ route('roster.index', ['month' => $previous->month, 'year' => $previous->year]) }}" class="inline-flex min-h-11 items-center justify-center rounded-lg border border-line px-4 text-sm font-semibold hover:bg-surface-2">Previous</a>
-            <div class="text-center text-2xl font-semibold tracking-tight">{{ $start->format('F Y') }}</div>
-            <div class="flex gap-2">
-                <a href="{{ route('roster.index', ['month' => $next->month, 'year' => $next->year]) }}" class="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-line px-4 text-sm font-semibold hover:bg-surface-2 sm:flex-none">Next</a>
-                <a href="{{ route('roster.index') }}" class="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-line px-4 text-sm font-semibold hover:bg-surface-2 sm:flex-none">Today</a>
-            </div>
+        <div class="mb-4 rounded-2xl border border-line bg-surface px-3 py-3 shadow-sm">
+            <x-month-nav :start="$start" :previous="$previous" :next="$next" />
         </div>
 
         @if($isManager)
@@ -139,14 +134,12 @@
                         @foreach($days as $day)
                             @php
                                 $dayTasks = $tasks[$day->toDateString()] ?? collect();
-                                $isRed = $day->isWeekend() || $dayTasks->contains(fn ($task) => $task->kind === 'holiday');
+                                $holidayName = $dayTasks->where('kind', 'holiday')->pluck('title')->implode(', ');
+                                $isRed = $day->isWeekend() || $holidayName !== '';
                             @endphp
-                            <th @if($isRed) data-red-day="{{ $day->toDateString() }}" @endif @if($day->isToday()) data-today="1" @endif class="sticky top-0 z-20 w-12 min-w-12 border-r border-b border-line px-1 py-2 text-center {{ $isRed ? 'bg-holiday text-rose-100' : 'bg-surface-2 text-muted' }} {{ $day->isToday() ? 'ring-2 ring-inset ring-sky-400' : '' }}">
+                            <th @if($isRed) data-red-day="{{ $day->toDateString() }}" @endif @if($day->isToday()) data-today="1" @endif @if($holidayName !== '') title="{{ $holidayName }}" @endif class="sticky top-0 z-20 w-12 min-w-12 border-r border-b border-line px-1 py-2 text-center {{ $isRed ? 'bg-holiday text-rose-100' : 'bg-surface-2 text-muted' }} {{ $day->isToday() ? 'ring-2 ring-inset ring-sky-400' : '' }}">
                                 <div class="text-sm font-semibold text-ink">{{ $day->day }}</div>
                                 <div>{{ $day->format('D') }}</div>
-                                @if($dayTasks->isNotEmpty())
-                                    <div class="mt-0.5 text-[10px] font-semibold {{ $isRed ? 'text-rose-200' : 'text-sky-200' }}">{{ $dayTasks->count() }}</div>
-                                @endif
                             </th>
                         @endforeach
                     </tr>
@@ -162,12 +155,14 @@
                                 @php
                                     $entry = $entries->get($user->id.'|'.$day->toDateString());
                                     $dayTasks = $tasks[$day->toDateString()] ?? collect();
-                                    $isRed = $day->isWeekend() || $dayTasks->contains(fn ($task) => $task->kind === 'holiday');
+                                    $holidayName = $dayTasks->where('kind', 'holiday')->pluck('title')->implode(', ');
+                                    $isRed = $day->isWeekend() || $holidayName !== '';
                                 @endphp
                                 <td class="border-r border-b border-line p-0 align-middle {{ $isRed ? 'bg-holiday/80' : 'bg-surface' }} {{ $day->isToday() ? 'ring-2 ring-inset ring-sky-300' : '' }}">
                                     @if($isManager)
                                         <button
                                             type="button"
+                                            @if($holidayName !== '') title="{{ $holidayName }}" @endif
                                             data-cell="{{ $user->id }}-{{ $day->toDateString() }}"
                                             data-user-id="{{ $user->id }}"
                                             data-user-name="{{ $user->name }}"
@@ -175,18 +170,14 @@
                                             data-date-label="{{ $day->format('D, j M Y') }}"
                                             data-status="{{ $entry->status ?? '' }}"
                                             x-on:click="openCell($event.currentTarget)"
-                                            class="flex min-h-11 w-full items-center justify-center px-1 py-1 hover:bg-white/10"
+                                            class="flex h-full min-h-12 w-full items-center justify-center text-xs font-bold tracking-wide {{ $entry ? ($badges[$entry->status] ?? '').' hover:brightness-95' : 'text-faint hover:bg-white/10' }}"
                                         >
-                                            @if($entry)
-                                                <span class="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold {{ $badges[$entry->status] ?? '' }}">{{ $labels[$entry->status] ?? $entry->status }}</span>
-                                            @else
-                                                <span class="text-faint">+</span>
-                                            @endif
+                                            {{ $entry ? ($labels[$entry->status] ?? $entry->status) : '+' }}
                                         </button>
                                     @else
-                                        <div class="flex min-h-11 items-center justify-center px-1 py-1">
+                                        <div class="flex h-full min-h-12 w-full items-center justify-center text-xs font-bold tracking-wide {{ $entry ? ($badges[$entry->status] ?? '') : '' }}">
                                             @if($entry)
-                                                <span class="inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold {{ $badges[$entry->status] ?? '' }}">{{ $labels[$entry->status] ?? $entry->status }}</span>
+                                                {{ $labels[$entry->status] ?? $entry->status }}
                                             @endif
                                         </div>
                                     @endif
@@ -228,8 +219,20 @@
         @endif
 
         <section class="mt-8">
-            <h2 class="mb-1 text-lg font-semibold">Calendar {{ $start->format('F Y') }}</h2>
-            <p class="mb-3 text-sm text-faint">Tap a date to add an event, a task, or a public holiday.</p>
+            <div class="mb-3 rounded-2xl border border-line bg-surface px-3 py-3 shadow-sm">
+                <x-month-nav :start="$start" :previous="$previous" :next="$next" />
+            </div>
+            <p class="mb-3 text-sm text-faint">Tap a date to add something. Tap an item to edit, remove, or mark a task complete.</p>
+            @php
+                $monthHolidays = collect($tasks)->flatten(1)->where('kind', 'holiday')->sortBy('date');
+            @endphp
+            @if($monthHolidays->isNotEmpty())
+                <p class="mb-3 text-sm text-rose-100">
+                    @foreach($monthHolidays as $holiday)
+                        <span class="mr-3 inline-block"><span class="font-semibold">{{ $holiday->date->format('j M') }}</span> {{ $holiday->title }}</span>
+                    @endforeach
+                </p>
+            @endif
 
             <div class="flex flex-col gap-2 md:grid md:grid-cols-7">
                 @foreach(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as $weekday)
@@ -256,14 +259,14 @@
                                 @php
                                     $chip = $task->kind === 'event' ? 'bg-sky-100 text-sky-950' : ($task->kind === 'holiday' ? 'bg-rose-200 text-rose-950' : 'bg-emerald-100 text-emerald-950');
                                 @endphp
-                                <div class="flex items-center gap-1 rounded-md py-0.5 pr-0.5 pl-2 text-xs leading-tight {{ $chip }} {{ $task->is_done ? 'line-through opacity-60' : '' }}">
-                                    <div class="min-w-0 flex-1 truncate">
-                                        <span class="font-semibold">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
-                                        <span class="opacity-50"> · </span>
-                                        <span>{{ $task->title }}</span>
-                                    </div>
-                                    <x-task-actions :task="$task" :label="$day->format('l, j F Y')" />
-                                </div>
+                                <button
+                                    type="button"
+                                    class="w-full rounded-md px-2 py-1.5 text-left text-xs leading-snug break-words whitespace-normal {{ $chip }} {{ $task->is_done ? 'line-through opacity-60' : '' }}"
+                                    x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
+                                >
+                                    <span class="block text-[10px] font-semibold uppercase tracking-wide">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
+                                    <span class="block font-semibold">{{ $task->title }}</span>
+                                </button>
                             @endforeach
                         </div>
                     </div>
@@ -272,19 +275,22 @@
 
             <div class="mt-6 rounded-2xl border border-line bg-surface p-4 shadow-sm">
                 <h3 class="text-sm font-semibold">Upcoming</h3>
-                <p class="mt-1 text-sm text-faint">Events, tasks, and public holidays outside {{ $start->format('F Y') }}.</p>
+                <p class="mt-1 text-sm text-faint">Events, tasks, and public holidays in {{ $next->format('F Y') }}.</p>
                 @if($upcoming->isEmpty())
-                    <p class="mt-3 text-sm text-faint">Nothing upcoming outside {{ $start->format('F') }}.</p>
+                    <p class="mt-3 text-sm text-faint">Nothing in {{ $next->format('F Y') }}.</p>
                 @else
                     <ul class="mt-2 divide-y divide-line">
                         @foreach($upcoming as $task)
-                            <li class="flex items-center gap-2 py-1 text-sm">
-                                <div class="min-w-0 flex-1">
+                            <li>
+                                <button
+                                    type="button"
+                                    class="w-full break-words whitespace-normal py-2 text-left text-sm {{ $task->is_done ? 'line-through opacity-60' : '' }}"
+                                    x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $task->date->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
+                                >
                                     <span class="font-medium">{{ $task->date->format('j M Y') }}</span>
                                     <span class="ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $task->kind === 'holiday' ? 'bg-rose-200 text-rose-950' : ($task->kind === 'event' ? 'bg-sky-100 text-sky-950' : 'bg-emerald-100 text-emerald-950') }}">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
                                     <span class="ml-2">{{ $task->title }}</span>
-                                </div>
-                                <x-task-actions :task="$task" :label="$task->date->format('l, j F Y')" />
+                                </button>
                             </li>
                         @endforeach
                     </ul>
@@ -293,44 +299,51 @@
         </section>
 
         <div x-show="taskOpen" x-cloak class="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-3 sm:items-center sm:p-4" x-on:click.self="taskOpen = false" x-on:keydown.escape.window="taskOpen = false">
-            <form method="POST" x-bind:action="taskAction" class="w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-4 shadow-xl">
-                @csrf
-                <template x-if="taskEditing">
-                    <input type="hidden" name="_method" value="PUT">
-                </template>
-                <input type="hidden" name="form" value="task">
-                <input type="hidden" name="date" x-bind:value="taskDate">
-                <h2 class="text-base font-semibold" x-text="taskEditing ? 'Edit item' : 'Add to this day'"></h2>
-                <p class="mt-0.5 text-xs text-faint" x-text="taskDateLabel"></p>
-                <div class="mt-4 grid grid-cols-3 gap-1 rounded-lg bg-field p-1 text-xs font-semibold">
-                    <label class="cursor-pointer">
-                        <input type="radio" name="kind" value="event" class="sr-only" x-model="taskKind">
-                        <span class="block rounded-md px-2 py-2 text-center" :class="taskKind === 'event' ? 'bg-sky-100 text-sky-950' : 'text-muted'">Event</span>
-                    </label>
-                    <label class="cursor-pointer">
-                        <input type="radio" name="kind" value="task" class="sr-only" x-model="taskKind">
-                        <span class="block rounded-md px-2 py-2 text-center" :class="taskKind === 'task' ? 'bg-emerald-100 text-emerald-950' : 'text-muted'">Task</span>
-                    </label>
-                    <label class="cursor-pointer">
-                        <input type="radio" name="kind" value="holiday" class="sr-only" x-model="taskKind">
-                        <span class="block rounded-md px-2 py-2 text-center" :class="taskKind === 'holiday' ? 'bg-rose-200 text-rose-950' : 'text-muted'">Holiday</span>
-                    </label>
-                </div>
-                <label class="mt-3 block text-sm">
-                    <span class="mb-1 block text-xs font-medium text-faint">Title</span>
-                    <input type="text" name="title" x-model="taskTitle" required maxlength="120" placeholder="Server patch, backup, national day" class="min-h-11 w-full rounded-lg border border-line bg-field px-3 py-2">
-                </label>
-                <div class="mt-4 flex items-center justify-between gap-3 border-t border-line pt-3">
-                    <label class="flex items-center gap-2 text-sm" x-show="taskEditing" x-cloak>
-                        <input type="checkbox" name="is_done" value="1" x-model="taskDone" x-bind:disabled="!taskEditing">
-                        <span>Done</span>
-                    </label>
-                    <div class="ml-auto flex gap-2">
-                        <button type="button" class="inline-flex h-9 items-center rounded-lg px-3 text-sm text-muted hover:bg-surface-2" x-on:click="taskOpen = false">Cancel</button>
-                        <button type="submit" class="inline-flex h-9 items-center rounded-lg bg-button px-3 text-sm font-semibold text-button-ink" x-text="taskEditing ? 'Save' : 'Add'"></button>
+            <div class="w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-4 shadow-xl">
+                <form method="POST" x-bind:action="taskAction">
+                    @csrf
+                    <template x-if="taskEditing">
+                        <input type="hidden" name="_method" value="PUT">
+                    </template>
+                    <input type="hidden" name="form" value="task">
+                    <input type="hidden" name="date" x-bind:value="taskDate">
+                    <h2 class="text-base font-semibold" x-text="taskEditing ? 'Edit item' : 'Add to this day'"></h2>
+                    <p class="mt-0.5 text-xs text-faint" x-text="taskDateLabel"></p>
+                    <div class="mt-4 grid grid-cols-3 gap-1 rounded-lg bg-field p-1 text-xs font-semibold">
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kind" value="event" class="sr-only" x-model="taskKind">
+                            <span class="block rounded-md px-2 py-2 text-center" :class="taskKind === 'event' ? 'bg-sky-100 text-sky-950' : 'text-muted'">Event</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kind" value="task" class="sr-only" x-model="taskKind">
+                            <span class="block rounded-md px-2 py-2 text-center" :class="taskKind === 'task' ? 'bg-emerald-100 text-emerald-950' : 'text-muted'">Task</span>
+                        </label>
+                        <label class="cursor-pointer">
+                            <input type="radio" name="kind" value="holiday" class="sr-only" x-model="taskKind">
+                            <span class="block rounded-md px-2 py-2 text-center" :class="taskKind === 'holiday' ? 'bg-rose-200 text-rose-950' : 'text-muted'">Holiday</span>
+                        </label>
                     </div>
-                </div>
-            </form>
+                    <label class="mt-3 block text-sm">
+                        <span class="mb-1 block text-xs font-medium text-faint">Title</span>
+                        <input type="text" name="title" x-model="taskTitle" required maxlength="120" placeholder="Server patch, backup, national day" class="min-h-11 w-full rounded-lg border border-line bg-field px-3 py-2">
+                    </label>
+                    <template x-if="taskEditing && taskKind === 'task'">
+                        <label class="mt-3 flex min-h-11 items-center gap-2 text-sm">
+                            <input type="checkbox" name="is_done" value="1" x-model="taskDone">
+                            <span>Mark as complete</span>
+                        </label>
+                    </template>
+                    <div class="mt-4 flex justify-end gap-2 border-t border-line pt-3">
+                        <button type="button" class="inline-flex h-11 items-center rounded-lg px-3 text-sm text-muted hover:bg-surface-2" x-on:click="taskOpen = false">Cancel</button>
+                        <button type="submit" class="inline-flex h-11 items-center rounded-lg bg-button px-3 text-sm font-semibold text-button-ink" x-text="taskEditing ? 'Save' : 'Add'"></button>
+                    </div>
+                </form>
+                <form x-show="taskEditing" x-cloak method="POST" x-bind:action="taskAction" class="mt-2" onsubmit="return confirm('Remove this from the calendar?')">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="inline-flex h-11 w-full items-center justify-center rounded-lg text-sm font-semibold text-rose-200 hover:bg-rose-200/15">Delete</button>
+                </form>
+            </div>
         </div>
     </div>
 @endsection

@@ -100,6 +100,75 @@ class RosterTest extends TestCase
         ]);
     }
 
+    public function test_opening_the_roster_adds_indonesian_public_holidays(): void
+    {
+        Carbon::setTestNow('2026-11-17');
+        $manager = User::factory()->manager()->create();
+
+        RosterEntry::query()->create([
+            'user_id' => $manager->id,
+            'date' => '2026-12-25',
+            'status' => 'SHIFT',
+            'note' => '08:00 - 17:00',
+        ]);
+        RosterEntry::query()->create([
+            'user_id' => $manager->id,
+            'date' => '2026-03-21',
+            'status' => 'OFF',
+        ]);
+
+        $this->actingAsRoster($manager)
+            ->get(route('roster.index', ['month' => 12, 'year' => 2026]))
+            ->assertOk()
+            ->assertSee('Christmas')
+            ->assertSee('Public holiday');
+
+        $this->assertDatabaseHas('day_tasks', [
+            'date' => '2026-12-25',
+            'title' => 'Christmas',
+            'kind' => 'holiday',
+        ]);
+        $this->assertDatabaseHas('day_tasks', [
+            'date' => '2026-05-01',
+            'title' => 'Labour Day',
+            'kind' => 'holiday',
+        ]);
+        $this->assertDatabaseHas('day_tasks', [
+            'date' => '2027-01-05',
+            'title' => "Isra and Mi'raj",
+            'kind' => 'holiday',
+        ]);
+        $this->assertDatabaseHas('day_tasks', [
+            'date' => '2027-08-17',
+            'title' => 'Independence Day',
+            'kind' => 'holiday',
+        ]);
+        $this->assertSame(35, DayTask::query()->where('kind', 'holiday')->count());
+        $this->assertDatabaseHas('roster_entries', [
+            'user_id' => $manager->id,
+            'date' => '2026-12-25',
+            'status' => 'PH',
+        ]);
+        $this->assertDatabaseHas('roster_entries', [
+            'user_id' => $manager->id,
+            'date' => '2026-03-21',
+            'status' => 'OFF',
+        ]);
+
+        $this->actingAsRoster($manager)
+            ->get(route('roster.index', ['month' => 1, 'year' => 2027]))
+            ->assertOk()
+            ->assertSee("New Year's Day")
+            ->assertSee("Isra and Mi'raj");
+
+        $this->assertSame(1, DayTask::query()->where('date', '2026-12-25')->where('kind', 'holiday')->count());
+        $this->assertDatabaseHas('roster_entries', [
+            'user_id' => $manager->id,
+            'date' => '2027-01-05',
+            'status' => 'PH',
+        ]);
+    }
+
     public function test_autofill_skips_public_holidays(): void
     {
         Carbon::setTestNow('2026-11-17');

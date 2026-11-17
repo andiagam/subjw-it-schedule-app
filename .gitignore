@@ -21,6 +21,11 @@
 /storage/*.key
 /storage/pail
 /vendor
+.vercel
+.agents/
+.claude/
+/agent/
+skills-lock.json
 _ide_helper.php
 Homestead.json
 Homestead.yaml

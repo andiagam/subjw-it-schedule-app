@@ -12,6 +12,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'auth.roster' => \App\Http\Middleware\EnsureRosterAuthenticated::class,
             'manager.only' => \App\Http\Middleware\EnsureManager::class,

@@ -11,44 +11,41 @@
 </head>
 <body class="min-h-screen bg-canvas text-ink antialiased">
     <header class="sticky top-0 z-40 border-b border-line bg-surface/95 backdrop-blur">
-        <div class="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 px-3 py-2 sm:px-4 md:gap-3 md:py-3">
-            <a href="{{ route('roster.index') }}" class="inline-flex min-h-11 items-center text-sm font-semibold tracking-tight text-ink">IT Roster</a>
+        <div class="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-3 sm:gap-3 sm:px-4">
+            <a href="{{ route('roster.index') }}" class="shrink-0 text-sm font-semibold tracking-tight text-ink">IT Roster</a>
 
             @if($currentUser)
-                <nav class="hidden items-center gap-1 overflow-x-auto text-sm md:flex">
-                    <a href="{{ route('roster.index') }}" class="inline-flex min-h-11 items-center rounded-lg px-3 {{ request()->routeIs('roster.index') ? 'bg-button text-button-ink' : 'text-muted hover:bg-surface-2' }}">Roster</a>
-                    <a href="{{ route('requests.index') }}" class="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 {{ request()->routeIs('requests.*') ? 'bg-button text-button-ink' : 'text-muted hover:bg-surface-2' }}">
+                <nav class="hidden items-center gap-1 text-sm md:flex">
+                    <a href="{{ route('roster.index') }}" class="inline-flex h-9 items-center rounded-lg px-3 {{ request()->routeIs('roster.index') ? 'bg-button text-button-ink' : 'text-muted hover:bg-surface-2' }}">Roster</a>
+                    <a href="{{ route('requests.index') }}" class="inline-flex h-9 items-center gap-2 rounded-lg px-3 {{ request()->routeIs('requests.*') ? 'bg-button text-button-ink' : 'text-muted hover:bg-surface-2' }}">
                         Requests
                         @if($currentUser->isManager())
                             <span class="inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold {{ $pendingRequestCount > 0 ? 'bg-rose-600 text-white' : (request()->routeIs('requests.*') ? 'bg-button-ink/15 text-button-ink' : 'bg-surface-2 text-muted') }}">{{ $pendingRequestCount }}</span>
                         @endif
                     </a>
                     @if($currentUser->isManager())
-                        <a href="{{ route('team.index') }}" class="inline-flex min-h-11 items-center rounded-lg px-3 {{ request()->routeIs('team.*') ? 'bg-button text-button-ink' : 'text-muted hover:bg-surface-2' }}">Team</a>
+                        <a href="{{ route('team.index') }}" class="inline-flex h-9 items-center rounded-lg px-3 {{ request()->routeIs('team.*') ? 'bg-button text-button-ink' : 'text-muted hover:bg-surface-2' }}">Team</a>
                     @endif
                 </nav>
 
-                <div class="flex w-full flex-wrap items-center gap-2 md:ml-auto md:w-auto">
+                <div class="ml-auto flex min-w-0 items-center gap-2">
                     @if($canSwitchUser)
-                        <form method="POST" action="{{ route('switch-user') }}" class="flex min-w-0 flex-1 items-center gap-2 md:flex-none">
+                        <form method="POST" action="{{ route('switch-user') }}" class="min-w-0">
                             @csrf
-                            <label for="switch-user" class="shrink-0 text-xs text-faint">Quick switch</label>
-                            <select id="switch-user" name="user_id" onchange="this.form.submit()" class="min-h-11 w-full min-w-0 rounded-lg border border-line bg-field px-2 text-xs text-ink md:w-auto">
+                            <label for="switch-user" class="sr-only">Quick switch</label>
+                            <select id="switch-user" name="user_id" onchange="this.form.submit()" class="h-9 max-w-[11rem] truncate rounded-lg border border-line bg-field px-2 text-xs text-ink sm:max-w-xs">
                                 @foreach($switchUsers as $person)
-                                    <option value="{{ $person->id }}" @selected($currentUser->id === $person->id)>{{ $person->name }} · {{ $person->role === 'MANAGER' ? 'Manager' : 'Staff' }}</option>
+                                    <option value="{{ $person->id }}" @selected($currentUser->id === $person->id)>{{ $person->name }}</option>
                                 @endforeach
                             </select>
                         </form>
+                    @else
+                        <span class="truncate text-sm font-medium">{{ $currentUser->name }}</span>
                     @endif
-
-                    <div class="leading-tight">
-                        <div class="text-sm font-medium">{{ $currentUser->name }}</div>
-                        <div class="hidden text-[11px] text-faint sm:block">{{ $currentUser->job_title }}</div>
-                    </div>
 
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
-                        <button type="submit" class="inline-flex min-h-11 items-center rounded-lg border border-line px-3 text-xs font-medium text-muted hover:bg-surface-2">Log out</button>
+                        <button type="submit" class="inline-flex h-9 items-center rounded-lg border border-line px-3 text-xs font-medium text-muted hover:bg-surface-2">Log out</button>
                     </form>
                 </div>
             @endif

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\DayTask;
 use App\Models\RosterEntry;
 use App\Models\User;
+use App\Support\IndonesianPublicHolidays;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -169,6 +170,33 @@ class RosterService
             ->get()
             ->mapWithKeys(fn (DayTask $task) => [$task->date->toDateString() => true])
             ->all();
+    }
+
+    /**
+     * Add the official Indonesian public holidays that are not on the calendar yet.
+     * A weekday that is empty or marked working becomes PH. Leave and existing days off stay put.
+     */
+    public function ensureIndonesianPublicHolidays(): void
+    {
+        foreach (IndonesianPublicHolidays::dates() as $date => $title) {
+            $exists = DayTask::query()
+                ->where('kind', 'holiday')
+                ->whereDate('date', $date)
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            DayTask::query()->create([
+                'date' => $date,
+                'title' => $title,
+                'kind' => 'holiday',
+                'is_done' => false,
+            ]);
+
+            $this->applyPublicHoliday($date);
+        }
     }
 
     /**
