@@ -28,7 +28,8 @@ RUN apt-get update \
         zip \
         opcache \
         pdo_mysql \
-    && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+    && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
+    && printf 'max_execution_time=60\n' > "$PHP_INI_DIR/conf.d/zz-max-execution-time.ini"
 
 WORKDIR /app
 

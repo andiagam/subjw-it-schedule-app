@@ -6,7 +6,9 @@ use App\Models\DayTask;
 use App\Models\RosterEntry;
 use App\Models\User;
 use Carbon\Carbon;
+use Database\Seeders\IndonesianPublicHolidaySeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
@@ -100,7 +102,7 @@ class RosterTest extends TestCase
         ]);
     }
 
-    public function test_opening_the_roster_adds_indonesian_public_holidays(): void
+    public function test_public_holidays_are_seeded_once_and_the_roster_page_stays_light(): void
     {
         Carbon::setTestNow('2026-11-17');
         $manager = User::factory()->manager()->create();
@@ -117,11 +119,8 @@ class RosterTest extends TestCase
             'status' => 'OFF',
         ]);
 
-        $this->actingAsRoster($manager)
-            ->get(route('roster.index', ['month' => 12, 'year' => 2026]))
-            ->assertOk()
-            ->assertSee('Christmas')
-            ->assertSee('Public holiday');
+        $this->seed(IndonesianPublicHolidaySeeder::class);
+        $this->seed(IndonesianPublicHolidaySeeder::class);
 
         $this->assertDatabaseHas('day_tasks', [
             'date' => '2026-12-25',
@@ -154,19 +153,30 @@ class RosterTest extends TestCase
             'date' => '2026-03-21',
             'status' => 'OFF',
         ]);
-
-        $this->actingAsRoster($manager)
-            ->get(route('roster.index', ['month' => 1, 'year' => 2027]))
-            ->assertOk()
-            ->assertSee("New Year's Day")
-            ->assertSee("Isra and Mi'raj");
-
-        $this->assertSame(1, DayTask::query()->where('date', '2026-12-25')->where('kind', 'holiday')->count());
         $this->assertDatabaseHas('roster_entries', [
             'user_id' => $manager->id,
             'date' => '2027-01-05',
             'status' => 'PH',
         ]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->actingAsRoster($manager)
+            ->get(route('roster.index', ['month' => 12, 'year' => 2026]))
+            ->assertOk()
+            ->assertSee('Christmas')
+            ->assertSee('Public holiday')
+            ->assertSee("New Year's Day")
+            ->assertSee("Isra and Mi'raj");
+
+        $queries = collect(DB::getQueryLog())->pluck('query');
+        $sql = strtolower($queries->implode("\n"));
+
+        $this->assertSame(5, $queries->count(), $queries->implode("\n"));
+        $this->assertStringNotContainsString('exists', $sql);
+        $this->assertStringNotContainsString('::date', $sql);
+        $this->assertSame(1, DayTask::query()->where('date', '2026-12-25')->where('kind', 'holiday')->count());
     }
 
     public function test_autofill_skips_public_holidays(): void

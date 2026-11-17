@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DayTask;
+use App\Models\LeaveRequest;
 use App\Models\RosterEntry;
 use App\Models\User;
 use App\Services\RosterExportService;
@@ -11,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\View as ViewFacade;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -19,29 +21,33 @@ class RosterController extends Controller
 {
     public function index(Request $request, RosterService $roster): View
     {
-        $roster->ensureIndonesianPublicHolidays();
         $start = $roster->monthStart($request->query('month'), $request->query('year'));
+        $monthEnd = $start->endOfMonth();
         $users = $roster->activeUsers();
         $entries = $roster->entriesForMonth($start);
-        $monthEnd = $start->endOfMonth()->toDateString();
 
-        $tasks = DayTask::query()
-            ->with('author')
-            ->whereBetween('date', [$start->toDateString(), $monthEnd])
-            ->orderBy('date')
-            ->orderBy('id')
-            ->get()
-            ->groupBy(fn (DayTask $task) => $task->date->toDateString());
-
-        $nextMonth = $start->addMonth();
-
-        $upcoming = DayTask::query()
-            ->with('author')
-            ->where('is_done', false)
-            ->whereBetween('date', [$nextMonth->toDateString(), $nextMonth->endOfMonth()->toDateString()])
+        $calendar = DayTask::query()
+            ->whereBetween('date', [$start->toDateString(), $start->addMonth()->endOfMonth()->toDateString()])
             ->orderBy('date')
             ->orderBy('id')
             ->get();
+
+        $tasks = $calendar
+            ->filter(fn (DayTask $task) => $task->date->lessThanOrEqualTo($monthEnd))
+            ->groupBy(fn (DayTask $task) => $task->date->toDateString());
+
+        $upcoming = $calendar
+            ->filter(fn (DayTask $task) => $task->date->greaterThan($monthEnd) && ! $task->is_done)
+            ->values();
+
+        $currentUser = $request->attributes->get('rosterUser');
+
+        ViewFacade::share([
+            'switchUsers' => $users,
+            'pendingRequestCount' => $currentUser instanceof User && $currentUser->isManager()
+                ? LeaveRequest::query()->where('status', 'PENDING')->count()
+                : 0,
+        ]);
 
         return view('roster.index', [
             'start' => $start,

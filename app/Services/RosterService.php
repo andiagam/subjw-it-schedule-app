@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Support\IndonesianPublicHolidays;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class RosterService
 {
@@ -172,30 +173,48 @@ class RosterService
     }
 
     /**
-     * Add the official Indonesian public holidays that are not on the calendar yet.
-     * A weekday that is empty or marked working becomes PH. Leave and existing days off stay put.
+     * Insert official public holidays that are not stored yet.
+     * Only those new dates are marked PH. Leave and existing days off stay put.
      */
-    public function ensureIndonesianPublicHolidays(): void
+    public function seedIndonesianPublicHolidays(): void
     {
-        foreach (IndonesianPublicHolidays::dates() as $date => $title) {
-            $exists = DayTask::query()
-                ->where('kind', 'holiday')
-                ->whereDate('date', $date)
-                ->exists();
+        $dates = IndonesianPublicHolidays::dates();
+        $keys = array_keys($dates);
+        sort($keys);
 
-            if ($exists) {
+        $existing = DayTask::query()
+            ->where('kind', 'holiday')
+            ->whereBetween('date', [$keys[0], $keys[array_key_last($keys)]])
+            ->pluck('date')
+            ->map(fn (mixed $date) => $date instanceof CarbonImmutable ? $date->toDateString() : (string) $date)
+            ->flip();
+
+        $now = now()->toDateTimeString();
+        $storedFalse = DB::connection()->getDriverName() === 'pgsql' ? DB::raw('false') : 0;
+        $inserts = [];
+
+        foreach ($dates as $date => $title) {
+            if ($existing->has($date)) {
                 continue;
             }
 
-            DayTask::query()->create([
+            $inserts[] = [
                 'date' => $date,
                 'title' => $title,
                 'kind' => 'holiday',
-                'is_done' => false,
-            ]);
-
-            $this->applyPublicHoliday($date);
+                'user_id' => null,
+                'is_done' => $storedFalse,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
         }
+
+        if ($inserts === []) {
+            return;
+        }
+
+        DayTask::query()->insert($inserts);
+        $this->applyPublicHolidays(array_column($inserts, 'date'));
     }
 
     /**
@@ -203,20 +222,72 @@ class RosterService
      */
     public function applyPublicHoliday(string $date): void
     {
-        foreach ($this->activeUsers() as $user) {
-            $entry = RosterEntry::query()
-                ->where('user_id', $user->id)
-                ->where('date', $date)
-                ->first();
+        $this->applyPublicHolidays([$date]);
+    }
 
-            if ($entry && in_array($entry->status, ['AL', 'DP', 'SL', 'OFF', 'PH'], true)) {
-                continue;
+    /**
+     * @param  array<int, string>  $dates
+     */
+    public function applyPublicHolidays(array $dates): void
+    {
+        $dates = array_values(array_unique($dates));
+
+        if ($dates === []) {
+            return;
+        }
+
+        $userIds = User::query()->where('is_active', true)->pluck('id');
+
+        if ($userIds->isEmpty()) {
+            return;
+        }
+
+        $entries = RosterEntry::query()
+            ->whereIn('user_id', $userIds)
+            ->whereIn('date', $dates)
+            ->get(['id', 'user_id', 'date', 'status']);
+
+        $byKey = $entries->keyBy(fn (RosterEntry $entry) => $entry->user_id.'|'.$entry->date->toDateString());
+        $preserve = ['AL', 'DP', 'SL', 'OFF', 'PH'];
+        $toUpdate = [];
+        $toInsert = [];
+        $now = now()->toDateTimeString();
+
+        foreach ($userIds as $userId) {
+            foreach ($dates as $date) {
+                $entry = $byKey->get($userId.'|'.$date);
+
+                if ($entry && in_array($entry->status, $preserve, true)) {
+                    continue;
+                }
+
+                if ($entry) {
+                    $toUpdate[] = $entry->id;
+
+                    continue;
+                }
+
+                $toInsert[] = [
+                    'user_id' => $userId,
+                    'date' => $date,
+                    'status' => 'PH',
+                    'note' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
             }
+        }
 
-            RosterEntry::query()->updateOrCreate(
-                ['user_id' => $user->id, 'date' => $date],
-                ['status' => 'PH', 'note' => null],
-            );
+        foreach (array_chunk($toUpdate, 100) as $ids) {
+            RosterEntry::query()->whereIn('id', $ids)->update([
+                'status' => 'PH',
+                'note' => null,
+                'updated_at' => $now,
+            ]);
+        }
+
+        foreach (array_chunk($toInsert, 100) as $rows) {
+            RosterEntry::query()->insert($rows);
         }
     }
 }

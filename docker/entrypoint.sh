@@ -30,6 +30,8 @@ if [ "$db_connection" = "pgsql" ]; then
 
     if [ "$needs_seed" = "1" ]; then
         php artisan db:seed --force --no-interaction
+    else
+        php artisan db:seed --class='Database\Seeders\IndonesianPublicHolidaySeeder' --force --no-interaction
     fi
 elif [ "$db_connection" = "sqlite" ]; then
     db_path="${DB_DATABASE:-}"
