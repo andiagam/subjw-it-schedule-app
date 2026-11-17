@@ -14,9 +14,10 @@ RUN apt-get update \
         libxml2-dev \
         libsqlite3-dev \
         libonig-dev \
+        libpq-dev \
     && rm -rf /var/lib/apt/lists/* \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" gd \
+    && docker-php-ext-install -j"$(nproc)" gd pdo_pgsql pgsql \
     && install-php-extensions \
         intl \
         bcmath \
@@ -26,7 +27,6 @@ RUN apt-get update \
         mbstring \
         zip \
         opcache \
-        pdo_pgsql \
         pdo_mysql \
     && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
@@ -99,9 +99,7 @@ ENV PORT=80 \
     CACHE_STORE=array \
     SESSION_DRIVER=cookie \
     QUEUE_CONNECTION=sync \
-    VIEW_COMPILED_PATH=/tmp/storage/framework/views \
-    DB_CONNECTION=sqlite \
-    DB_DATABASE=/tmp/database.sqlite
+    VIEW_COMPILED_PATH=/tmp/storage/framework/views
 
 USER www-data
 

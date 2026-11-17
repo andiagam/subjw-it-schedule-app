@@ -1,6 +1,8 @@
 #!/bin/sh
 set -eu
 
+cd /app
+
 mkdir -p \
     /tmp/storage/framework/cache/data \
     /tmp/storage/framework/sessions \
@@ -10,9 +12,23 @@ mkdir -p \
 
 export VIEW_COMPILED_PATH="${VIEW_COMPILED_PATH:-/tmp/storage/framework/views}"
 
-db_connection="${DB_CONNECTION:-sqlite}"
+db_connection="${DB_CONNECTION:-pgsql}"
 
-if [ "$db_connection" = "sqlite" ]; then
+if [ "$db_connection" = "pgsql" ]; then
+    php artisan migrate --force --no-interaction
+
+    user_count="$(php -r '
+        require "/app/vendor/autoload.php";
+        $app = require "/app/bootstrap/app.php";
+        $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+        $kernel->bootstrap();
+        fwrite(STDOUT, (string) Illuminate\Support\Facades\DB::table("users")->count());
+    ')"
+
+    if [ "$user_count" = "0" ]; then
+        php artisan db:seed --force --no-interaction
+    fi
+elif [ "$db_connection" = "sqlite" ]; then
     db_path="${DB_DATABASE:-}"
 
     case "$db_path" in

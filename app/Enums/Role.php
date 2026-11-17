@@ -18,6 +18,6 @@ enum Role: string
 
     public static function orderSql(): string
     {
-        return "case role when 'IT Manager' then 0 when 'IT Staff' then 1 when 'IT Trainee' then 2 else 3 end";
+        return "case when role = 'IT Manager' then 0 when role = 'IT Staff' then 1 when role = 'IT Trainee' then 2 else 3 end";
     }
 }
