@@ -229,7 +229,7 @@
                         $isRed = $day->isWeekend() || $dayTasks->contains(fn ($task) => $task->kind === 'holiday');
                         $cellBg = $day->isToday() ? 'bg-today' : ($day->isWeekend() ? 'bg-day-off' : 'bg-surface-lowest');
                     @endphp
-                    <div @if($isRed) data-red-day="{{ $day->toDateString() }}" @endif class="group flex min-h-16 flex-col border-r border-b border-outline-variant p-1.5 nth-[7n]:border-r-0 {{ $cellBg }}" x-on:click="if ($event.target.closest('button')) return; addHint = @js($day->toDateString())">
+                    <div data-calendar-day="{{ $day->toDateString() }}" @if($isRed) data-red-day="{{ $day->toDateString() }}" @endif class="group flex min-h-16 flex-col border-r border-b border-outline-variant p-1.5 nth-[7n]:border-r-0 {{ $cellBg }}" x-on:click="if ($event.target.closest('button')) return; addHint = @js($day->toDateString())">
                         <div class="flex h-6 items-center justify-between gap-1 px-0.5">
                             <span class="text-sm font-medium text-on-surface">{{ $day->day }}</span>
                             <button
@@ -239,7 +239,7 @@
                                 x-on:click.stop="openTask(@js($day->toDateString()), @js($day->format('l, j F Y')))"
                             >+ Add</button>
                         </div>
-                        <div class="space-y-1">
+                        <div class="space-y-1" data-day-items>
                             @php
                                 $tasksOnDay = $dayTasks->where('kind', 'task')->values();
                                 $tasksGrouped = false;
@@ -255,7 +255,9 @@
                                                     <li class="break-words whitespace-normal marker:font-medium {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}">
                                                         <button
                                                             type="button"
-                                                            class="w-full text-left font-medium"
+                                                            data-task-id="{{ $groupedTask->id }}"
+                                                            data-task-title
+                                                            class="w-full text-left font-medium {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}"
                                                             x-on:click="openEdit(@js(['id' => $groupedTask->id, 'date' => $groupedTask->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $groupedTask->title, 'kind' => $groupedTask->kind, 'done' => (bool) $groupedTask->is_done]))"
                                                         >{{ $groupedTask->title }}</button>
                                                     </li>
@@ -266,11 +268,12 @@
                                 @else
                                     <button
                                         type="button"
+                                        data-task-id="{{ $task->id }}"
                                         class="w-full rounded-lg px-2 py-1.5 text-left text-xs leading-snug break-words whitespace-normal {{ $chipFor($task->kind) }} {{ $task->is_done ? 'line-through opacity-60' : '' }}"
                                         x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
                                     >
                                         <span class="block text-[10px] font-medium tracking-wide">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
-                                        <span class="block font-medium">{{ $task->title }}</span>
+                                        <span class="block font-medium" data-task-title>{{ $task->title }}</span>
                                     </button>
                                 @endif
                             @endforeach
@@ -313,7 +316,9 @@
                                                     <li class="break-words whitespace-normal {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}">
                                                         <button
                                                             type="button"
-                                                            class="w-full text-left"
+                                                            data-task-id="{{ $groupedTask->id }}"
+                                                            data-task-title
+                                                            class="w-full text-left {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}"
                                                             x-on:click="openEdit(@js(['id' => $groupedTask->id, 'date' => $groupedTask->date->toDateString(), 'label' => $groupedTask->date->format('l, j F Y'), 'title' => $groupedTask->title, 'kind' => $groupedTask->kind, 'done' => (bool) $groupedTask->is_done]))"
                                                         >{{ $groupedTask->title }}</button>
                                                     </li>
@@ -325,12 +330,13 @@
                                     <li>
                                         <button
                                             type="button"
+                                            data-task-id="{{ $task->id }}"
                                             class="row-hover w-full break-words whitespace-normal rounded-2xl px-2 py-2 text-left text-sm {{ $task->is_done ? 'line-through opacity-60' : '' }}"
                                             x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $task->date->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
                                         >
                                             <span class="font-medium">{{ $task->date->format('j M Y') }}</span>
                                             <span class="ml-2 m3-chip border-0 {{ $chipFor($task->kind) }}">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
-                                            <span class="ml-2">{{ $task->title }}</span>
+                                            <span class="ml-2" data-task-title>{{ $task->title }}</span>
                                         </button>
                                     </li>
                                 @endif
@@ -349,7 +355,7 @@
         <div x-show="taskOpen" x-cloak class="m3-scrim" x-on:click.self="taskOpen = false" x-on:keydown.escape.window="taskOpen = false">
             <div class="m3-sheet sm:max-w-sm">
                 <div class="m3-handle"></div>
-                <form method="POST" x-bind:action="taskAction">
+                <form method="POST" x-bind:action="taskAction" x-on:submit.prevent="saveTask">
                     @csrf
                     <template x-if="taskEditing">
                         <input type="hidden" name="_method" value="PUT">
@@ -378,7 +384,7 @@
                     </label>
                     <template x-if="taskEditing && taskKind === 'task'">
                         <label class="mt-4 flex min-h-11 items-center gap-3 text-sm">
-                            <input type="checkbox" name="is_done" value="1" class="m3-check" x-model="taskDone">
+                            <input type="checkbox" name="is_done" value="1" class="m3-check" x-model="taskDone" x-on:change="markTaskDone()">
                             <span>Mark as complete</span>
                         </label>
                     </template>
@@ -387,11 +393,9 @@
                         <button type="submit" class="btn-filled state-layer" x-text="taskEditing ? 'Save' : 'Add'"></button>
                     </div>
                 </form>
-                <form x-show="taskEditing" x-cloak method="POST" x-bind:action="taskAction" class="mt-2" onsubmit="return confirm('Remove this from the calendar?')">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn-text state-layer w-full text-error">Delete</button>
-                </form>
+                <div x-show="taskEditing" x-cloak class="mt-2">
+                    <button type="button" class="btn-text state-layer w-full text-error" x-on:click="deleteTask">Delete</button>
+                </div>
             </div>
         </div>
     </div>

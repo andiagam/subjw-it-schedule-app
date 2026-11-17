@@ -23,6 +23,7 @@
     <style>[x-cloak]{display:none !important}</style>
 </head>
 <body class="min-h-screen bg-surface text-on-surface antialiased">
+    <div id="nav-progress" class="nav-progress hidden" aria-hidden="true"><span></span></div>
     @php
         $nav = [
             ['route' => 'roster.index', 'match' => 'roster.index', 'label' => 'Roster', 'icon' => 'calendar_month'],
@@ -48,7 +49,7 @@
                 <nav class="order-last flex w-full min-w-0 items-center gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:order-none md:w-auto md:flex-1 md:pb-0 [&::-webkit-scrollbar]:hidden" aria-label="Primary">
                     @foreach($nav as $item)
                         @php $active = request()->routeIs($item['match']); @endphp
-                        <a href="{{ route($item['route']) }}" class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm whitespace-nowrap sm:px-4 sm:py-2 {{ $active ? 'bg-secondary-container font-semibold text-on-secondary-container' : 'font-medium text-on-surface-variant hover:bg-surface-high' }}">
+                        <a href="{{ route($item['route']) }}" data-nav @if($active) aria-current="page" @endif class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm whitespace-nowrap sm:px-4 sm:py-2 {{ $active ? 'bg-secondary-container font-semibold text-on-secondary-container' : 'font-medium text-on-surface-variant hover:bg-surface-high' }}">
                             <x-icon :name="$item['icon']" :filled="$active" class="text-[18px]" />
                             {{ $item['label'] }}
                             @if($item['route'] === 'requests.index' && $currentUser->isManager() && $pendingRequestCount > 0)

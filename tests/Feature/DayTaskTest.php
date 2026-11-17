@@ -105,6 +105,21 @@ class DayTaskTest extends TestCase
             ->assertOk()
             ->assertSee('Close the ticket')
             ->assertSee('line-through', false);
+
+        $this->actingAsRoster($staff)->putJson(route('roster.tasks.update', $task), [
+            'date' => '2026-12-08',
+            'title' => 'Close the ticket',
+            'kind' => 'task',
+            'is_done' => false,
+        ])->assertOk()
+            ->assertJsonPath('task.is_done', false);
+
+        $this->actingAsRoster($staff)
+            ->deleteJson(route('roster.tasks.destroy', $task))
+            ->assertOk()
+            ->assertJsonPath('task.id', $task->id);
+
+        $this->assertDatabaseMissing('day_tasks', ['id' => $task->id]);
     }
 
     public function test_a_public_holiday_fills_empty_and_working_days_and_keeps_leave(): void

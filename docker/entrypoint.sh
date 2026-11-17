@@ -11,6 +11,12 @@ mkdir -p \
     /tmp/bootstrap/cache
 
 export VIEW_COMPILED_PATH="${VIEW_COMPILED_PATH:-/tmp/storage/framework/views}"
+export APP_CONFIG_CACHE="${APP_CONFIG_CACHE:-/tmp/bootstrap/cache/config.php}"
+export APP_ROUTES_CACHE="${APP_ROUTES_CACHE:-/tmp/bootstrap/cache/routes-v7.php}"
+
+php artisan config:cache --no-interaction
+php artisan route:cache --no-interaction
+php artisan view:cache --no-interaction
 
 db_connection="${DB_CONNECTION:-pgsql}"
 
