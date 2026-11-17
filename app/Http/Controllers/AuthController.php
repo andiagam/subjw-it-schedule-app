@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\Pin;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -24,41 +25,50 @@ class AuthController extends Controller
             'pin' => ['required', 'regex:/^\d{4,}$/'],
         ]);
 
-        $user = User::query()
-            ->whereRaw('lower(username) = ?', [mb_strtolower(trim($credentials['username']))])
-            ->first();
+        $result = DB::transaction(function () use ($credentials) {
+            $user = User::query()
+                ->whereRaw('lower(username) = ?', [mb_strtolower(trim($credentials['username']))])
+                ->lockForUpdate()
+                ->first();
 
-        if (! $user || ! $this->accountIsActive($user)) {
-            throw ValidationException::withMessages([
-                'username' => 'Those credentials do not match an active account.',
-            ]);
-        }
+            if (! $user || ! $this->accountIsActive($user)) {
+                return ['error' => 'Those credentials do not match an active account.'];
+            }
 
-        if ($user->is_locked) {
-            throw ValidationException::withMessages([
-                'username' => 'This account is locked. Ask an IT Manager to unlock it.',
-            ]);
-        }
+            if ($user->is_locked) {
+                return ['error' => 'This account is locked. Ask an IT Manager to unlock it.'];
+            }
 
-        if (! Pin::matches($user, $credentials['pin'])) {
-            $attempts = $user->failed_login_attempts + 1;
-            $locked = $attempts >= 5;
+            if (! Pin::matches($user, $credentials['pin'])) {
+                $attempts = $user->failed_login_attempts + 1;
+                $locked = $attempts >= 5;
+                $user->forceFill([
+                    'failed_login_attempts' => $attempts,
+                    'is_locked' => $locked,
+                ])->save();
+
+                return ['error' => $locked
+                    ? 'This account is locked. Ask an IT Manager to unlock it.'
+                    : 'Those credentials do not match an active account.'];
+            }
+
             $user->forceFill([
-                'failed_login_attempts' => $attempts,
-                'is_locked' => $locked,
+                'failed_login_attempts' => 0,
+                'is_locked' => false,
+                'pin' => Pin::isHashed((string) $user->pin) ? $user->pin : Pin::hash($credentials['pin']),
             ])->save();
 
+            return ['user' => $user];
+        });
+
+        if (isset($result['error'])) {
             throw ValidationException::withMessages([
-                'username' => $locked
-                    ? 'This account is locked. Ask an IT Manager to unlock it.'
-                    : 'Those credentials do not match an active account.',
+                'username' => $result['error'],
             ]);
         }
 
-        $user->forceFill([
-            'failed_login_attempts' => 0,
-            'pin' => Pin::isHashed((string) $user->pin) ? $user->pin : Pin::hash($credentials['pin']),
-        ])->save();
+        /** @var User $user */
+        $user = $result['user'];
 
         $request->session()->regenerate();
         $request->session()->put('roster_user_id', $user->id);

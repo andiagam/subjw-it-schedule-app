@@ -192,33 +192,35 @@ class RosterService
             }
         }
 
-        foreach (array_chunk($inserts, 100) as $rows) {
-            RosterEntry::query()->insert($rows);
-        }
+        DB::transaction(function () use ($inserts, $shiftIds, $offIds, $blackIds, $now) {
+            foreach (array_chunk($inserts, 100) as $rows) {
+                RosterEntry::query()->upsert($rows, ['user_id', 'date'], ['status', 'note', 'updated_at']);
+            }
 
-        foreach (array_chunk($shiftIds, 100) as $ids) {
-            RosterEntry::query()->whereIn('id', $ids)->update([
-                'status' => 'SHIFT',
-                'note' => '08:00 - 17:00',
-                'updated_at' => $now,
-            ]);
-        }
+            foreach (array_chunk($shiftIds, 100) as $ids) {
+                RosterEntry::query()->whereIn('id', $ids)->update([
+                    'status' => 'SHIFT',
+                    'note' => '08:00 - 17:00',
+                    'updated_at' => $now,
+                ]);
+            }
 
-        foreach (array_chunk($offIds, 100) as $ids) {
-            RosterEntry::query()->whereIn('id', $ids)->update([
-                'status' => 'OFF',
-                'note' => null,
-                'updated_at' => $now,
-            ]);
-        }
+            foreach (array_chunk($offIds, 100) as $ids) {
+                RosterEntry::query()->whereIn('id', $ids)->update([
+                    'status' => 'OFF',
+                    'note' => null,
+                    'updated_at' => $now,
+                ]);
+            }
 
-        foreach (array_chunk($blackIds, 100) as $ids) {
-            RosterEntry::query()->whereIn('id', $ids)->update([
-                'status' => 'BLACK',
-                'note' => null,
-                'updated_at' => $now,
-            ]);
-        }
+            foreach (array_chunk($blackIds, 100) as $ids) {
+                RosterEntry::query()->whereIn('id', $ids)->update([
+                    'status' => 'BLACK',
+                    'note' => null,
+                    'updated_at' => $now,
+                ]);
+            }
+        });
 
         return $changed;
     }

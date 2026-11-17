@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\LeaveRequest;
 use App\Models\User;
 use App\Support\Pin;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -132,6 +133,58 @@ class AuthenticationTest extends TestCase
             'pin' => '1111',
         ])->assertSessionHasErrors('username');
         $this->assertNull(session('roster_user_id'));
+    }
+
+    public function test_a_successful_login_clears_earlier_failures(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'retry',
+            'pin' => '2208',
+            'failed_login_attempts' => 4,
+            'is_locked' => false,
+        ]);
+
+        $this->post('/login', [
+            'username' => 'retry',
+            'pin' => '2208',
+        ])->assertRedirect(route('roster.index'));
+
+        $user->refresh();
+        $this->assertSame(0, $user->failed_login_attempts);
+        $this->assertFalse($user->is_locked);
+        $this->assertTrue(Pin::matches($user, '2208'));
+    }
+
+    public function test_staff_and_trainees_cannot_manage_the_roster_or_the_team(): void
+    {
+        $staff = User::factory()->create();
+        $trainee = User::factory()->create(['role' => 'IT Trainee']);
+        $target = User::factory()->create();
+        $leave = LeaveRequest::query()->create([
+            'user_id' => $target->id,
+            'type' => 'AL',
+            'start_date' => '2026-11-02',
+            'end_date' => '2026-11-02',
+            'reason' => 'Rest',
+            'status' => 'PENDING',
+        ]);
+
+        foreach ([$staff, $trainee] as $actor) {
+            $this->actingAsRoster($actor)->post(route('roster.autofill'), [
+                'month' => 11,
+                'year' => 2026,
+            ])->assertForbidden();
+            $this->actingAsRoster($actor)->post(route('requests.approve', $leave))->assertForbidden();
+            $this->actingAsRoster($actor)->post(route('requests.reject', $leave))->assertForbidden();
+            $this->actingAsRoster($actor)->post(route('team.store'))->assertForbidden();
+            $this->actingAsRoster($actor)->put(route('team.update', $target))->assertForbidden();
+            $this->actingAsRoster($actor)->delete(route('team.archive', $target))->assertForbidden();
+            $this->actingAsRoster($actor)->post(route('team.unlock', $target))->assertForbidden();
+            $this->actingAsRoster($actor)->post(route('team.pin', $target))->assertForbidden();
+        }
+
+        $this->assertTrue($target->refresh()->is_active);
+        $this->assertSame('PENDING', $leave->refresh()->status);
     }
 
     public function test_anyone_can_change_their_own_pin_and_only_a_manager_can_reset_another(): void

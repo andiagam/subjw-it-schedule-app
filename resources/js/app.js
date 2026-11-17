@@ -195,7 +195,7 @@ document.addEventListener('alpine:init', () => {
             document.querySelectorAll('[data-cell].roster-selected').forEach((cell) => cell.classList.remove('roster-selected'));
         },
         async applyBulk(status) {
-            if (this.selectedDates.length === 0) {
+            if (this.selectedDates.length === 0 || !this.claimSave()) {
                 return;
             }
 
@@ -214,7 +214,11 @@ document.addEventListener('alpine:init', () => {
                         status,
                     }),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await this.readJson(response);
+
+                if (data === null) {
+                    return;
+                }
 
                 if (!response.ok) {
                     cells.forEach((cell, index) => this.paintCell(cell, previous[index]));
@@ -228,6 +232,8 @@ document.addEventListener('alpine:init', () => {
             } catch {
                 cells.forEach((cell, index) => this.paintCell(cell, previous[index]));
                 this.toast('Those days could not be saved. Check the connection and try again.', 'error');
+            } finally {
+                this.releaseSave();
             }
         },
         openTask(date, label) {
@@ -263,6 +269,10 @@ document.addEventListener('alpine:init', () => {
             this.open = true;
         },
         async save() {
+            if (!this.claimSave()) {
+                return;
+            }
+
             const button = document.querySelector(`[data-cell="${CSS.escape(`${this.userId}-${this.date}`)}"]`);
             const previous = button ? this.paintCell(button, this.status) : '';
             this.open = false;
@@ -278,7 +288,11 @@ document.addEventListener('alpine:init', () => {
                         note: '',
                     }),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await this.readJson(response);
+
+                if (data === null) {
+                    return;
+                }
 
                 if (!response.ok) {
                     if (button) {
@@ -294,6 +308,8 @@ document.addEventListener('alpine:init', () => {
                 }
 
                 this.toast('That cell could not be saved. Check the connection and try again.', 'error');
+            } finally {
+                this.releaseSave();
             }
         },
         paintCell(button, status) {
@@ -309,6 +325,10 @@ document.addEventListener('alpine:init', () => {
             if (!this.taskTitle.trim()) {
                 this.toast('Add a title first.', 'error');
 
+                return;
+            }
+
+            if (!this.claimSave()) {
                 return;
             }
 
@@ -347,7 +367,11 @@ document.addEventListener('alpine:init', () => {
                     headers: this.jsonHeaders(),
                     body: JSON.stringify(payload),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await this.readJson(response);
+
+                if (data === null) {
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(this.errorText(data) || 'That calendar item could not be saved.');
@@ -387,10 +411,12 @@ document.addEventListener('alpine:init', () => {
                 this.paintDayMarks(payload.date);
                 this.showUpcomingEmpty();
                 this.toast(error.message || 'That calendar item could not be saved.', 'error');
+            } finally {
+                this.releaseSave();
             }
         },
         async markTaskDone() {
-            if (!this.taskEditing) {
+            if (!this.taskEditing || !this.claimSave()) {
                 return;
             }
 
@@ -410,7 +436,11 @@ document.addEventListener('alpine:init', () => {
                     headers: this.jsonHeaders(),
                     body: JSON.stringify(payload),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await this.readJson(response);
+
+                if (data === null) {
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(this.errorText(data) || 'That task could not be updated.');
@@ -425,10 +455,12 @@ document.addEventListener('alpine:init', () => {
                     box.checked = this.taskDone;
                 });
                 this.toast(error.message || 'That task could not be updated.', 'error');
+            } finally {
+                this.releaseSave();
             }
         },
         async deleteTask() {
-            if (!confirm('Remove this from the calendar?')) {
+            if (!confirm('Remove this from the calendar?') || !this.claimSave()) {
                 return;
             }
 
@@ -445,7 +477,11 @@ document.addEventListener('alpine:init', () => {
                     method: 'DELETE',
                     headers: this.jsonHeaders(),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await this.readJson(response);
+
+                if (data === null) {
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(this.errorText(data) || 'That calendar item could not be removed.');
@@ -462,6 +498,8 @@ document.addEventListener('alpine:init', () => {
                 this.showUpcomingEmpty();
                 this.refreshDaySheet();
                 this.toast(error.message || 'That calendar item could not be removed.', 'error');
+            } finally {
+                this.releaseSave();
             }
         },
         taskId() {
@@ -473,6 +511,27 @@ document.addEventListener('alpine:init', () => {
                 Accept: 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
             };
+        },
+        claimSave() {
+            if (this.saving) {
+                return false;
+            }
+
+            this.saving = true;
+
+            return true;
+        },
+        releaseSave() {
+            this.saving = false;
+        },
+        async readJson(response) {
+            if (response.status === 401 || response.status === 419) {
+                window.location.assign('/login');
+
+                return null;
+            }
+
+            return response.json().catch(() => ({}));
         },
         errorText(data) {
             if (data.errors) {
@@ -783,6 +842,12 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
+            if (!this.claimSave()) {
+                input.checked = !input.checked;
+
+                return;
+            }
+
             const id = row.dataset.todayTask;
             const title = row.querySelector('[data-task-title]')?.textContent?.trim() || '';
             const done = input.checked;
@@ -800,7 +865,11 @@ document.addEventListener('alpine:init', () => {
                         is_done: done,
                     }),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await this.readJson(response);
+
+                if (data === null) {
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(this.errorText(data) || 'That task could not be updated.');
@@ -816,6 +885,8 @@ document.addEventListener('alpine:init', () => {
                 this.paintDayMarks(row.dataset.date);
                 this.refreshDaySheet();
                 this.toast(error.message || 'That task could not be updated.', 'error');
+            } finally {
+                this.releaseSave();
             }
         },
         async removeTodayTask(id) {
@@ -825,7 +896,7 @@ document.addEventListener('alpine:init', () => {
             await this.removeTodayItem(id, 'event');
         },
         async removeTodayItem(id, noun) {
-            if (!confirm(`Remove this ${noun}?`)) {
+            if (!confirm(`Remove this ${noun}?`) || !this.claimSave()) {
                 return;
             }
 
@@ -844,7 +915,11 @@ document.addEventListener('alpine:init', () => {
                     method: 'DELETE',
                     headers: this.jsonHeaders(),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await this.readJson(response);
+
+                if (data === null) {
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(this.errorText(data) || `That ${noun} could not be removed.`);
@@ -863,6 +938,8 @@ document.addEventListener('alpine:init', () => {
                 this.showUpcomingEmpty();
                 this.refreshDaySheet();
                 this.toast(error.message || `That ${noun} could not be removed.`, 'error');
+            } finally {
+                this.releaseSave();
             }
         },
         showTodayEmpty() {
@@ -1238,6 +1315,10 @@ document.addEventListener('alpine:init', () => {
             });
         },
         async setItemDone(id, date, title, done) {
+            if (!this.claimSave()) {
+                return;
+            }
+
             const snapshot = this.snapshotTask(id);
             this.paintTask(id, { title, kind: 'task', is_done: done, date });
             this.paintDayMarks(date);
@@ -1254,7 +1335,11 @@ document.addEventListener('alpine:init', () => {
                         is_done: done,
                     }),
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await this.readJson(response);
+
+                if (data === null) {
+                    return;
+                }
 
                 if (!response.ok) {
                     throw new Error(this.errorText(data) || 'That task could not be updated.');
@@ -1268,6 +1353,8 @@ document.addEventListener('alpine:init', () => {
                 this.paintDayMarks(date);
                 this.refreshDaySheet();
                 this.toast(error.message || 'That task could not be updated.', 'error');
+            } finally {
+                this.releaseSave();
             }
         },
         paintDayMarks(date) {
