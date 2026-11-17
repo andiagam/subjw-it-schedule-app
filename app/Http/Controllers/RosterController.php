@@ -25,7 +25,8 @@ class RosterController extends Controller
     {
         $start = $roster->monthStart($request->query('month'), $request->query('year'));
         $monthEnd = $start->endOfMonth();
-        $users = $roster->activeUsers();
+        $people = $roster->peopleForRoster($start);
+        $users = $people->filter(fn (User $user): bool => $roster->isVisibleInMonth($user, $start))->values();
         $entries = $roster->entriesForMonth($start);
 
         $today = CarbonImmutable::now('Asia/Jakarta')->startOfDay();
@@ -64,7 +65,7 @@ class RosterController extends Controller
         $currentUser = $request->attributes->get('rosterUser');
 
         ViewFacade::share([
-            'switchUsers' => $users,
+            'switchUsers' => $people->filter(fn (User $user): bool => $user->is_active && ! $user->employmentHasEnded())->values(),
             'pendingRequestCount' => $currentUser instanceof User && $currentUser->isManager()
                 ? LeaveRequest::query()->where('status', 'PENDING')->count()
                 : 0,
@@ -190,7 +191,7 @@ class RosterController extends Controller
         $created = $roster->autofill($start);
         $message = $created === 0
             ? 'Nothing to fill. Leave, sick days, day pending, public holidays, and black shifts were left as they are.'
-            : 'Updated '.$created.' days. Leave, sick days, day pending, public holidays, and black shifts stayed as they are. Days after an end date were marked black.';
+            : 'Updated '.$created.' days. Leave, sick days, day pending, public holidays, and black shifts stayed as they are. Days before a start date were left empty. Days after an end date were marked black.';
 
         return redirect()
             ->route('roster.index', ['month' => $start->month, 'year' => $start->year])

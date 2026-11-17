@@ -8,6 +8,7 @@ use App\Support\Pin;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class TeamController extends Controller
@@ -90,7 +91,7 @@ class TeamController extends Controller
     }
 
     /**
-     * @return array{name: string, username: string, job_title: string, role: string, al_balance: int, dp_balance: int, end_date: ?string, pin?: string}
+     * @return array{name: string, username: string, job_title: string, role: string, al_balance: int, dp_balance: int, start_date: ?string, end_date: ?string, pin?: string}
      */
     private function validated(Request $request, ?User $user = null): array
     {
@@ -102,6 +103,7 @@ class TeamController extends Controller
             'pin' => [$user ? 'nullable' : 'required', 'regex:/^\d{6,}$/'],
             'al_balance' => ['required', 'integer', 'min:0', 'max:999'],
             'dp_balance' => ['required', 'integer', 'min:0', 'max:999'],
+            'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date'],
         ]);
 
@@ -109,7 +111,14 @@ class TeamController extends Controller
         $data['job_title'] = trim($data['job_title']);
         $data['al_balance'] = (int) $data['al_balance'];
         $data['dp_balance'] = (int) $data['dp_balance'];
+        $data['start_date'] = $data['start_date'] ?? null;
         $data['end_date'] = $data['end_date'] ?? null;
+
+        if ($data['start_date'] !== null && $data['end_date'] !== null && $data['end_date'] < $data['start_date']) {
+            throw ValidationException::withMessages([
+                'end_date' => 'The end date must be on or after the start date.',
+            ]);
+        }
 
         if (filled($data['pin'] ?? null)) {
             $data['pin'] = Pin::hash($data['pin']);

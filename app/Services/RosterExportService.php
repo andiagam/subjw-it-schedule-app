@@ -32,7 +32,7 @@ class RosterExportService
 
     public function make(CarbonImmutable $start): Spreadsheet
     {
-        $users = $this->roster->activeUsers();
+        $users = $this->roster->usersForMonth($start);
         $days = $this->roster->days($start);
         $entries = $this->roster->entriesForMonth($start);
         $summaries = $this->roster->summaries($users, $entries);

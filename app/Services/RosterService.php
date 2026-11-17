@@ -7,6 +7,7 @@ use App\Models\RosterEntry;
 use App\Models\User;
 use App\Support\IndonesianPublicHolidays;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -50,14 +51,73 @@ class RosterService
     }
 
     /**
+     * Employees whose row belongs on this month's roster and export.
+     *
      * @return Collection<int, User>
      */
-    public function activeUsers(): Collection
+    public function usersForMonth(CarbonImmutable $start): Collection
     {
-        return User::query()
-            ->where('is_active', true)
+        return $this->monthQuery($start)->orderedByHierarchy()->get();
+    }
+
+    /**
+     * Month rows plus anyone who can still sign in, so the switcher stays usable
+     * while the table itself stays limited to this month.
+     *
+     * @return Collection<int, User>
+     */
+    public function peopleForRoster(CarbonImmutable $start): Collection
+    {
+        return $this->monthQuery($start)
+            ->orWhere(fn (Builder $query) => $query->canSignIn())
             ->orderedByHierarchy()
             ->get();
+    }
+
+    public function isVisibleInMonth(User $user, CarbonImmutable $start): bool
+    {
+        if (! $user->is_active && $user->end_date === null) {
+            return true;
+        }
+
+        $monthStart = $start->toDateString();
+        $monthEnd = $start->endOfMonth()->toDateString();
+        $started = $user->start_date === null || $user->start_date->toDateString() <= $monthEnd;
+        $notFinishedBefore = $user->end_date === null || $user->end_date->toDateString() >= $monthStart;
+
+        return $started && $notFinishedBefore;
+    }
+
+    /**
+     * @return Builder<User>
+     */
+    private function monthQuery(CarbonImmutable $start): Builder
+    {
+        $monthStart = $start->toDateString();
+        $monthEnd = $start->endOfMonth()->toDateString();
+        $history = RosterEntry::query()
+            ->whereBetween('date', [$monthStart, $monthEnd])
+            ->select('user_id');
+
+        return User::query()->where(function (Builder $query) use ($monthStart, $monthEnd, $history): void {
+            $query->where(function (Builder $employed) use ($monthStart, $monthEnd): void {
+                $employed
+                    ->where(function (Builder $end) use ($monthStart): void {
+                        $end->whereNull('end_date')->orWhere('end_date', '>=', $monthStart);
+                    })
+                    ->where(function (Builder $begin) use ($monthEnd): void {
+                        $begin->whereNull('start_date')->orWhere('start_date', '<=', $monthEnd);
+                    })
+                    ->where(function (Builder $visible): void {
+                        $visible->where('is_active', true)->orWhereNotNull('end_date');
+                    });
+            })->orWhere(function (Builder $archived) use ($history): void {
+                $archived
+                    ->where('is_active', false)
+                    ->whereNull('end_date')
+                    ->whereIn('id', $history);
+            });
+        });
     }
 
     /**
@@ -144,11 +204,28 @@ class RosterService
         $now = now()->toDateTimeString();
         $changed = 0;
 
-        foreach ($this->activeUsers() as $user) {
+        $monthStart = $start->toDateString();
+        $monthEnd = $end->toDateString();
+
+        foreach ($this->usersForMonth($start) as $user) {
+            if (! $user->is_active && $user->end_date === null) {
+                continue;
+            }
+
+            $startDate = $user->start_date?->toDateString();
             $endDate = $user->end_date?->toDateString();
+
+            if (($endDate !== null && $endDate < $monthStart) || ($startDate !== null && $startDate > $monthEnd)) {
+                continue;
+            }
 
             for ($day = $start; $day->lte($end); $day = $day->addDay()) {
                 $date = $day->toDateString();
+
+                if ($startDate !== null && $date < $startDate) {
+                    continue;
+                }
+
                 $pastEnd = $endDate !== null && $date > $endDate;
 
                 if (! $pastEnd && isset($holidays[$date])) {
@@ -302,14 +379,18 @@ class RosterService
             return;
         }
 
-        $userIds = User::query()->where('is_active', true)->pluck('id');
+        $users = User::query()
+            ->where(function (Builder $query): void {
+                $query->where('is_active', true)->orWhereNotNull('end_date');
+            })
+            ->get(['id', 'is_active', 'start_date', 'end_date']);
 
-        if ($userIds->isEmpty()) {
+        if ($users->isEmpty()) {
             return;
         }
 
         $entries = RosterEntry::query()
-            ->whereIn('user_id', $userIds)
+            ->whereIn('user_id', $users->pluck('id'))
             ->whereIn('date', $dates)
             ->get(['id', 'user_id', 'date', 'status']);
 
@@ -319,9 +400,20 @@ class RosterService
         $toInsert = [];
         $now = now()->toDateTimeString();
 
-        foreach ($userIds as $userId) {
+        foreach ($users as $user) {
+            $startDate = $user->start_date?->toDateString();
+            $endDate = $user->end_date?->toDateString();
+
             foreach ($dates as $date) {
-                $entry = $byKey->get($userId.'|'.$date);
+                if ($startDate !== null && $date < $startDate) {
+                    continue;
+                }
+
+                if ($endDate !== null && $date > $endDate) {
+                    continue;
+                }
+
+                $entry = $byKey->get($user->id.'|'.$date);
 
                 if ($entry && in_array($entry->status, $preserve, true)) {
                     continue;
@@ -334,7 +426,7 @@ class RosterService
                 }
 
                 $toInsert[] = [
-                    'user_id' => $userId,
+                    'user_id' => $user->id,
                     'date' => $date,
                     'status' => 'PH',
                     'note' => null,

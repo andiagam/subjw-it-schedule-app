@@ -36,13 +36,13 @@ class AppServiceProvider extends ServiceProvider
             if (! $user instanceof User) {
                 $userId = session('roster_user_id');
                 $user = $userId
-                    ? User::query()->whereKey($userId)->where('is_active', true)->first()
+                    ? User::query()->whereKey($userId)->canSignIn()->first()
                     : null;
             }
 
             $impersonatorId = session('impersonator_id');
             $impersonator = $impersonatorId
-                ? User::query()->whereKey($impersonatorId)->where('is_active', true)->where('role', Role::Manager->value)->first()
+                ? User::query()->whereKey($impersonatorId)->canSignIn()->where('role', Role::Manager->value)->first()
                 : null;
 
             $canSwitch = ($user?->isManager() && $impersonator === null) || $impersonator !== null;
@@ -56,7 +56,7 @@ class AppServiceProvider extends ServiceProvider
                 'switchUsers' => $canSwitch
                     ? ($sharedUsers instanceof Collection
                         ? $sharedUsers
-                        : User::query()->where('is_active', true)->orderedByHierarchy()->get())
+                        : User::query()->canSignIn()->orderedByHierarchy()->get())
                     : collect(),
                 'pendingRequestCount' => $user?->isManager()
                     ? ($sharedPending ?? LeaveRequest::query()->where('status', 'PENDING')->count())

@@ -13,6 +13,7 @@
             job_title: @js(old('job_title', '')),
             role: @js(old('role', 'IT Staff')),
             pin: @js(old('pin', '')),
+            start_date: @js(old('start_date', '')),
             end_date: @js(old('end_date', '')),
             al_balance: @js(old('al_balance', 12)),
             dp_balance: @js(old('dp_balance', 0)),
@@ -29,6 +30,7 @@
                 this.job_title = '';
                 this.role = 'IT Staff';
                 this.pin = '';
+                this.start_date = '';
                 this.end_date = '';
                 this.al_balance = 12;
                 this.dp_balance = 0;
@@ -43,6 +45,7 @@
                 this.job_title = member.job_title;
                 this.role = member.role;
                 this.pin = '';
+                this.start_date = member.start_date || '';
                 this.end_date = member.end_date || '';
                 this.al_balance = member.al_balance;
                 this.dp_balance = member.dp_balance;
@@ -88,6 +91,7 @@
                                     'username' => $member->username,
                                     'job_title' => $member->job_title,
                                     'role' => $member->role,
+                                    'start_date' => $member->start_date?->toDateString(),
                                     'end_date' => $member->end_date?->toDateString(),
                                     'al_balance' => $member->al_balance,
                                     'dp_balance' => $member->dp_balance,
@@ -99,6 +103,10 @@
                                     @if($member->is_locked)
                                         <span class="ml-2 rounded-full bg-error-container px-2 py-0.5 text-[11px] font-medium text-on-error-container">Locked</span>
                                     @endif
+                                    @if($member->employmentHasEnded())
+                                        <span class="ml-2 rounded-full bg-neutral-950 px-2 py-0.5 text-[11px] font-medium text-white">Ended</span>
+                                    @endif
+                                    <div class="mt-0.5 text-xs font-normal text-on-surface-variant">Start {{ $member->start_date?->format('d M Y') ?? '—' }} · End {{ $member->end_date?->format('d M Y') ?? '—' }}</div>
                                 </td>
                                 <td class="px-3 py-3 font-mono text-xs">{{ $member->username }}</td>
                                 <td class="px-3 py-3">{{ $member->job_title }}</td>
@@ -134,6 +142,7 @@
                             'username' => $member->username,
                             'job_title' => $member->job_title,
                             'role' => $member->role,
+                            'start_date' => $member->start_date?->toDateString(),
                             'end_date' => $member->end_date?->toDateString(),
                             'al_balance' => $member->al_balance,
                             'dp_balance' => $member->dp_balance,
@@ -147,8 +156,12 @@
                                     @if($member->is_locked)
                                         <span class="ml-2 rounded-full bg-error-container px-2 py-0.5 text-[11px] font-medium text-on-error-container">Locked</span>
                                     @endif
+                                    @if($member->employmentHasEnded())
+                                        <span class="ml-2 rounded-full bg-neutral-950 px-2 py-0.5 text-[11px] font-medium text-white">Ended</span>
+                                    @endif
                                 </div>
                                 <div class="text-sm text-on-surface-variant">{{ $member->job_title }}</div>
+                                <div class="mt-1 text-xs text-on-surface-variant">Start {{ $member->start_date?->format('d M Y') ?? '—' }} · End {{ $member->end_date?->format('d M Y') ?? '—' }}</div>
                                 <div class="mt-1 font-mono text-xs">{{ $member->username }}</div>
                             </div>
                             <x-status-pill :status="$member->role" />
@@ -213,6 +226,10 @@
                     <label class="relative block text-sm">
                         <input type="password" name="pin" x-model="pin" inputmode="numeric" minlength="6" maxlength="32" pattern="[0-9]{6,}" x-bind:required="!editing" placeholder=" " autocomplete="new-password" class="peer m3-field tracking-[0.3em]">
                         <span class="m3-float" x-text="editing ? 'New PIN (optional)' : 'PIN (min. 6 digits)'"></span>
+                    </label>
+                    <label class="relative block text-sm">
+                        <input type="date" name="start_date" x-model="start_date" placeholder=" " class="peer m3-field">
+                        <span class="m3-float">Start date</span>
                     </label>
                     <label class="relative block text-sm">
                         <input type="date" name="end_date" x-model="end_date" placeholder=" " class="peer m3-field">

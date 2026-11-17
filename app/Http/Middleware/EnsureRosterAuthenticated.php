@@ -13,7 +13,7 @@ class EnsureRosterAuthenticated
     public function handle(Request $request, Closure $next): Response
     {
         $id = $request->session()->get('roster_user_id');
-        $user = $id ? User::query()->whereKey($id)->where('is_active', true)->first() : null;
+        $user = $id ? User::query()->whereKey($id)->canSignIn()->first() : null;
 
         if (! $user) {
             $request->session()->forget(['roster_user_id', 'impersonator_id']);

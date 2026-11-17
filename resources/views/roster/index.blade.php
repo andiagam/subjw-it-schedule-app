@@ -96,7 +96,7 @@
             @if($isManager)
                 <div class="flex items-center gap-2">
                     <button type="button" class="btn-outlined state-layer h-9 px-4 text-sm" :class="multiMode && 'border-primary text-primary'" x-on:click="multiMode = !multiMode" x-text="multiMode ? 'Selecting' : 'Multi-select'">Multi-select</button>
-                    <form method="POST" action="{{ route('roster.autofill') }}" onsubmit="return confirm('Fill this month from each person\'s default week? Empty cells and regular ON/OFF days are updated. Annual leave, sick leave, day pending, public holidays, and black shifts stay as they are. Days after an end date become black.')">
+                    <form method="POST" action="{{ route('roster.autofill') }}" onsubmit="return confirm('Fill this month from each person\'s default week? Days before a start date stay empty. Days after an end date become black. Annual leave, sick leave, day pending, public holidays, and black shifts stay as they are.')">
                         @csrf
                         <input type="hidden" name="month" value="{{ $start->month }}">
                         <input type="hidden" name="year" value="{{ $start->year }}">

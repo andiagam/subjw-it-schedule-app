@@ -31,7 +31,7 @@ class AuthController extends Controller
                 ->lockForUpdate()
                 ->first();
 
-            if (! $user || ! $this->accountIsActive($user)) {
+            if (! $user || ! $this->accountIsActive($user) || $user->employmentHasEnded()) {
                 return ['error' => 'Those credentials do not match an active account.'];
             }
 
@@ -121,7 +121,7 @@ class AuthController extends Controller
             'user_id' => ['required', 'integer'],
         ]);
 
-        $target = User::query()->whereKey($data['user_id'])->where('is_active', true)->first();
+        $target = User::query()->whereKey($data['user_id'])->canSignIn()->first();
 
         if (! $target) {
             return back()->with('error', 'That account is not active.');
@@ -159,7 +159,7 @@ class AuthController extends Controller
 
         return User::query()
             ->whereKey($id)
-            ->where('is_active', true)
+            ->canSignIn()
             ->where('role', Role::Manager->value)
             ->first();
     }
