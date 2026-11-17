@@ -175,8 +175,11 @@ class DayTaskTest extends TestCase
             ->assertOk()
             ->assertSee("Today's Tasks")
             ->assertSee('+ Add task')
+            ->assertSee("Today's Events")
+            ->assertSee('+ Add event')
             ->assertSee('Activity Log')
-            ->assertSee('No tasks for today.');
+            ->assertSee('No tasks for today.')
+            ->assertSee('No events for today.');
 
         $this->actingAsRoster($staff)->post(route('roster.tasks.store'), [
             'date' => '2026-11-17',
@@ -245,8 +248,63 @@ class DayTaskTest extends TestCase
             'kind' => 'event',
         ])->assertRedirect();
 
-        $this->assertDatabaseMissing('task_activity_logs', [
+        $this->assertDatabaseHas('task_activity_logs', [
             'task_title' => 'Team lunch',
+            'action' => 'added',
+            'actor_name' => 'Bintang',
+            'actor_username' => 'tnbin839',
+        ]);
+    }
+
+    public function test_today_events_follow_jakarta_and_keep_an_activity_trail(): void
+    {
+        Carbon::setTestNow('2026-11-17 09:30:00');
+        $staff = User::factory()->create(['name' => 'Bintang', 'username' => 'tnbin839']);
+
+        $this->actingAsRoster($staff)->postJson(route('roster.tasks.store'), [
+            'date' => '2026-11-17',
+            'title' => 'BOD',
+            'kind' => 'event',
+        ])->assertOk()
+            ->assertJsonPath('task.kind', 'event')
+            ->assertJsonPath('activity.0.action', 'added')
+            ->assertJsonPath('activity.0.actor_name', 'Bintang');
+
+        $event = DayTask::query()->where('title', 'BOD')->first();
+        $this->assertSame('Bintang', $event->created_by_name);
+
+        $this->actingAsRoster($staff)
+            ->get(route('roster.index', ['month' => 10, 'year' => 2026]))
+            ->assertOk()
+            ->assertSee("Today's Events")
+            ->assertSee('BOD')
+            ->assertSee('Added by Bintang')
+            ->assertSee('+ Add event')
+            ->assertSee('No tasks for today.');
+
+        $this->actingAsRoster($staff)->putJson(route('roster.tasks.update', $event), [
+            'date' => '2026-11-17',
+            'title' => 'BOD meeting',
+            'kind' => 'event',
+        ])->assertOk()
+            ->assertJsonPath('activity.0.action', 'edited')
+            ->assertJsonPath('activity.0.actor_name', 'Bintang');
+
+        $this->assertSame('Bintang', $event->refresh()->updated_by_name);
+
+        $this->actingAsRoster($staff)
+            ->deleteJson(route('roster.tasks.destroy', $event))
+            ->assertOk()
+            ->assertJsonPath('activity.0.action', 'removed');
+
+        $this->assertDatabaseMissing('day_tasks', ['id' => $event->id]);
+        $this->assertDatabaseHas('task_activity_logs', [
+            'day_task_id' => null,
+            'task_title' => 'BOD meeting',
+            'task_date' => '2026-11-17',
+            'action' => 'removed',
+            'actor_name' => 'Bintang',
+            'actor_username' => 'tnbin839',
         ]);
     }
 }

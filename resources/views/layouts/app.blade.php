@@ -82,14 +82,14 @@
                     $nameParts = preg_split('/\s+/', trim($currentUser->name)) ?: [];
                     $initials = strtoupper(mb_substr($nameParts[0] ?? 'U', 0, 1).mb_substr($nameParts[1] ?? '', 0, 1));
                 @endphp
-                @if($canSwitchUser)
-                    <div class="relative shrink-0" x-data="{ menu: false }" x-on:keydown.escape.window="menu = false">
-                        <button type="button" class="inline-flex h-8 items-center gap-0 rounded-full border border-outline-variant bg-surface-lowest py-0.5 pr-0 pl-0.5 text-sm hover:bg-surface-high sm:h-10 sm:max-w-[14rem] sm:gap-2 sm:py-1 sm:pr-2 sm:pl-1" x-on:click="menu = !menu" :aria-expanded="menu.toString()" aria-label="{{ $currentUser->name }}">
-                            <span class="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-medium text-on-primary sm:size-8 sm:text-xs" aria-hidden="true">{{ $initials }}</span>
-                            <span class="hidden truncate sm:inline">{{ $currentUser->name }}</span>
-                            <x-icon name="expand_more" class="text-[16px] text-on-surface-variant sm:text-[18px]" />
-                        </button>
-                        <div x-show="menu" x-cloak x-on:click.outside="menu = false" class="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-outline-variant bg-surface-lowest py-1 shadow-lg">
+                <div class="relative shrink-0" x-data="{ menu: false, pinOpen: {{ $errors->any() && old('form') === 'pin' ? 'true' : 'false' }} }" x-on:keydown.escape.window="menu = false; if (!pinOpen) return; pinOpen = false">
+                    <button type="button" class="inline-flex h-8 items-center gap-0 rounded-full border border-outline-variant bg-surface-lowest py-0.5 pr-0 pl-0.5 text-sm hover:bg-surface-high sm:h-10 sm:max-w-[14rem] sm:gap-2 sm:py-1 sm:pr-2 sm:pl-1" x-on:click="menu = !menu" :aria-expanded="menu.toString()" aria-label="{{ $currentUser->name }}">
+                        <span class="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-[10px] font-medium text-on-primary sm:size-8 sm:text-xs" aria-hidden="true">{{ $initials }}</span>
+                        <span class="hidden truncate sm:inline">{{ $currentUser->name }}</span>
+                        <x-icon name="expand_more" class="text-[16px] text-on-surface-variant sm:text-[18px]" />
+                    </button>
+                    <div x-show="menu" x-cloak x-on:click.outside="menu = false" class="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-xl border border-outline-variant bg-surface-lowest py-1 shadow-lg">
+                        @if($canSwitchUser)
                             @foreach($switchUsers as $person)
                                 @php
                                     $parts = preg_split('/\s+/', trim($person->name)) ?: [];
@@ -107,14 +107,40 @@
                                     </button>
                                 </form>
                             @endforeach
-                        </div>
+                        @endif
+                        <button type="button" class="flex w-full items-center gap-2 border-t border-outline-variant px-3 py-2 text-left text-sm hover:bg-surface-high" x-on:click="menu = false; pinOpen = true">
+                            <x-icon name="key" class="text-[18px] text-on-surface-variant" />
+                            Change PIN
+                        </button>
                     </div>
-                @else
-                    <span class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-full border border-outline-variant bg-surface-lowest py-0.5 pr-2 pl-0.5 text-sm sm:h-10 sm:gap-2 sm:py-1 sm:pr-3 sm:pl-1">
-                        <span class="grid size-7 place-items-center rounded-full bg-primary text-[11px] font-medium text-on-primary sm:size-8 sm:text-xs" aria-hidden="true">{{ $initials }}</span>
-                        <span class="hidden truncate sm:inline">{{ $currentUser->name }}</span>
-                    </span>
-                @endif
+                    <div x-show="pinOpen" x-cloak class="m3-scrim" x-on:click.self="pinOpen = false">
+                        <form method="POST" action="{{ route('account.pin') }}" class="m3-sheet sm:max-w-sm">
+                            <div class="m3-handle"></div>
+                            @csrf
+                            <input type="hidden" name="form" value="pin">
+                            <h2 class="text-[22px] leading-7">Change PIN</h2>
+                            <p class="mt-1 text-sm text-on-surface-variant">Use at least 6 digits.</p>
+                            <div class="mt-5 space-y-3">
+                                <label class="relative block text-sm">
+                                    <input type="password" name="current_pin" inputmode="numeric" pattern="[0-9]{4,}" required placeholder=" " autocomplete="current-password" class="peer m3-field tracking-[0.3em]">
+                                    <span class="m3-float">Current PIN</span>
+                                </label>
+                                <label class="relative block text-sm">
+                                    <input type="password" name="pin" inputmode="numeric" minlength="6" pattern="[0-9]{6,}" required placeholder=" " autocomplete="new-password" class="peer m3-field tracking-[0.3em]">
+                                    <span class="m3-float">New PIN (min. 6 digits)</span>
+                                </label>
+                                <label class="relative block text-sm">
+                                    <input type="password" name="pin_confirmation" inputmode="numeric" minlength="6" pattern="[0-9]{6,}" required placeholder=" " autocomplete="new-password" class="peer m3-field tracking-[0.3em]">
+                                    <span class="m3-float">Confirm New PIN</span>
+                                </label>
+                            </div>
+                            <div class="mt-6 flex justify-end gap-2">
+                                <button type="button" class="btn-text state-layer" x-on:click="pinOpen = false">Cancel</button>
+                                <button type="submit" class="btn-filled state-layer">Save PIN</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
 
                 <form method="POST" action="{{ route('logout') }}" class="shrink-0">
                     @csrf

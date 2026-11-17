@@ -5,13 +5,15 @@
 @section('content')
     @php
         $isManager = $currentUser?->isManager() ?? false;
-        $badges = [
-            'SHIFT' => 'badge-shift',
-            'OFF' => 'badge-off',
-            'AL' => 'badge-al',
-            'DP' => 'badge-dp',
-            'SL' => 'badge-sl',
-            'PH' => 'badge-ph',
+        $blocks = [
+            'SHIFT' => 'bg-emerald-200/85 text-emerald-950 dark:bg-emerald-900/75 dark:text-emerald-100',
+            'OFF' => 'bg-red-200/85 text-red-950 dark:bg-red-900/75 dark:text-red-100',
+            'AL' => 'bg-amber-200/90 text-amber-950 dark:bg-amber-900/75 dark:text-amber-100',
+            'DP' => 'bg-blue-200/85 text-blue-950 dark:bg-blue-900/75 dark:text-blue-100',
+            'SL' => 'bg-orange-200/90 text-orange-950 dark:bg-orange-900/75 dark:text-orange-100',
+            'PH' => 'bg-purple-200/85 text-purple-950 dark:bg-purple-900/75 dark:text-purple-100',
+            'BLACK' => 'bg-neutral-950 text-white hover:bg-neutral-800 dark:bg-black dark:border-neutral-700',
+            '' => 'bg-white text-slate-400 dark:bg-[#1E1F23]',
         ];
         $labels = [
             'SHIFT' => 'ON',
@@ -20,6 +22,17 @@
             'DP' => 'DP',
             'SL' => 'SL',
             'PH' => 'PH',
+            'BLACK' => '',
+            '' => '+',
+        ];
+        $legend = [
+            'SHIFT' => 'Working',
+            'OFF' => 'Off',
+            'AL' => 'Annual leave',
+            'DP' => 'Day pending',
+            'SL' => 'Sick leave',
+            'PH' => 'Public holiday',
+            'BLACK' => 'Black shift (Ended)',
         ];
         $taskLabels = [
             'event' => 'Event',
@@ -29,7 +42,10 @@
         $chipFor = fn ($kind) => $kind === 'event'
             ? 'bg-primary-container text-on-primary-container'
             : ($kind === 'holiday' ? 'bg-error-container text-on-error-container' : 'bg-success-container text-on-success-container');
-        $today = \Carbon\CarbonImmutable::now()->startOfDay();
+        $markFor = fn ($kind) => $kind === 'event'
+            ? 'bg-blue-500'
+            : ($kind === 'holiday' ? 'bg-purple-600' : 'bg-emerald-500');
+        $today = \Carbon\CarbonImmutable::now('Asia/Jakarta')->startOfDay();
         $activityLabels = [
             'added' => 'Added',
             'edited' => 'Edited',
@@ -46,7 +62,10 @@
         'taskKind' => old('kind', 'task'),
         'taskTitle' => old('title', ''),
         'today' => $today->toDateString(),
+        'todayLabel' => $today->format('l, j F Y'),
         'actorName' => $currentUser->name,
+        'upcomingStart' => $upcomingStart,
+        'upcomingEnd' => $upcomingEnd,
     ]))">
         @php
             $todayInMonth = $today->betweenIncluded($start, $start->endOfMonth());
@@ -64,6 +83,9 @@
                 foreach ($users as $person) {
                     $todayEntry = $entries->get($person->id.'|'.$todayKey);
                     $key = $todayEntry->status ?? 'EMPTY';
+                    if ($key === 'BLACK') {
+                        continue;
+                    }
                     $todayGroups[$key][] = $person->name;
                 }
             }
@@ -73,7 +95,8 @@
             <x-month-nav :start="$start" :previous="$previous" :next="$next" />
             @if($isManager)
                 <div class="flex items-center gap-2">
-                    <form method="POST" action="{{ route('roster.autofill') }}" onsubmit="return confirm('Fill this month from each person\'s default week? Empty cells and regular ON/OFF days are updated. Annual leave, sick leave, day pending, and public holidays stay as they are.')">
+                    <button type="button" class="btn-outlined state-layer h-9 px-4 text-sm" :class="multiMode && 'border-primary text-primary'" x-on:click="multiMode = !multiMode" x-text="multiMode ? 'Selecting' : 'Multi-select'">Multi-select</button>
+                    <form method="POST" action="{{ route('roster.autofill') }}" onsubmit="return confirm('Fill this month from each person\'s default week? Empty cells and regular ON/OFF days are updated. Annual leave, sick leave, day pending, public holidays, and black shifts stay as they are. Days after an end date become black.')">
                         @csrf
                         <input type="hidden" name="month" value="{{ $start->month }}">
                         <input type="hidden" name="year" value="{{ $start->year }}">
@@ -86,10 +109,10 @@
 
         <section>
         <h2 class="mb-3 text-sm font-medium">Shift Roster</h2>
-        <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-on-surface-variant">
-            @foreach(['SHIFT' => 'Working', 'OFF' => 'Off', 'AL' => 'Annual leave', 'DP' => 'Day pending', 'SL' => 'Sick leave', 'PH' => 'Public holiday'] as $status => $name)
+        <div class="mb-3 hidden flex-wrap items-center gap-x-4 gap-y-2 text-xs text-on-surface-variant sm:flex">
+            @foreach($legend as $status => $name)
                 <span class="inline-flex items-center gap-1.5">
-                    <span class="roster-badge {{ $badges[$status] }}">{{ $labels[$status] }}</span>
+                    <span class="inline-flex h-5 min-w-5 items-center justify-center rounded px-1 text-[10px] font-bold {{ $blocks[$status] }}">{{ $labels[$status] }}</span>
                     {{ $name }}
                 </span>
             @endforeach
@@ -99,7 +122,7 @@
             <table class="min-w-max border-separate border-spacing-0 text-xs">
                 <thead>
                     <tr>
-                        <th class="sticky top-0 left-0 z-30 w-36 min-w-36 border-r border-b border-slate-200 bg-white px-3 py-2 text-left dark:border-slate-800 dark:bg-[#1E1F23] sm:w-48">Employee</th>
+                        <th class="sticky top-0 left-0 z-30 w-36 min-w-36 border-r-2 border-b border-slate-300 bg-white px-3 py-2 text-left dark:border-slate-600 dark:bg-[#1E1F23] sm:w-48">Employee</th>
                         @foreach($days as $day)
                             @php
                                 $dayTasks = $tasks[$day->toDateString()] ?? collect();
@@ -116,7 +139,7 @@
                 <tbody>
                     @forelse($users as $user)
                         <tr>
-                            <th class="sticky left-0 z-10 w-36 min-w-36 border-r border-b border-slate-200 bg-white px-3 py-2 text-left dark:border-slate-800 dark:bg-[#1E1F23] sm:w-48">
+                            <th class="sticky left-0 z-10 w-36 min-w-36 border-r-2 border-b border-slate-300 bg-white px-3 py-2 text-left dark:border-slate-600 dark:bg-[#1E1F23] sm:w-48">
                                 <div class="font-medium text-on-surface">{{ $user->name }}</div>
                                 <div class="font-normal text-on-surface-variant">{{ $user->job_title }}</div>
                             </th>
@@ -127,7 +150,11 @@
                                     $holidayName = $dayTasks->where('kind', 'holiday')->pluck('title')->implode(', ');
                                     $isRed = $day->isWeekend() || $holidayName !== '';
                                 @endphp
-                                <td class="border-b border-outline-variant p-1 text-center align-middle {{ $day->isToday() ? 'bg-today' : ($isRed ? 'bg-day-off' : 'bg-surface-lowest') }}">
+                                @php
+                                    $cellStatus = $entry->status ?? '';
+                                    $cellText = $labels[$cellStatus] ?? ($cellStatus === '' ? '+' : $cellStatus);
+                                @endphp
+                                <td class="border-r border-b border-slate-200 p-0 align-middle dark:border-slate-700/80 {{ $day->isToday() ? 'ring-2 ring-inset ring-blue-600 dark:ring-blue-400' : '' }}">
                                     @if($isManager)
                                         <button
                                             type="button"
@@ -137,22 +164,13 @@
                                             data-user-name="{{ $user->name }}"
                                             data-date="{{ $day->toDateString() }}"
                                             data-date-label="{{ $day->format('D, j M Y') }}"
-                                            data-status="{{ $entry->status ?? '' }}"
-                                            x-on:click="openCell($event.currentTarget)"
-                                            class="flex h-10 w-full items-center justify-center rounded-md hover:bg-on-surface/5"
-                                        >
-                                            @if($entry)
-                                                <span data-badge class="roster-badge {{ $badges[$entry->status] ?? '' }}">{{ $labels[$entry->status] ?? $entry->status }}</span>
-                                            @else
-                                                <span data-badge class="text-[11px] text-outline">+</span>
-                                            @endif
-                                        </button>
+                                            data-status="{{ $cellStatus }}"
+                                            x-on:pointerdown="startDrag($event)"
+                                            x-on:click="chooseCell($event)"
+                                            class="roster-block h-full min-h-[46px] w-full border-0 p-0 flex items-center justify-center text-xs font-bold tracking-wide {{ $blocks[$cellStatus] ?? $blocks[''] }}"
+                                        >{{ $cellText }}</button>
                                     @else
-                                        <div class="flex h-10 w-full items-center justify-center">
-                                            @if($entry)
-                                                <span class="roster-badge {{ $badges[$entry->status] ?? '' }}">{{ $labels[$entry->status] ?? $entry->status }}</span>
-                                            @endif
-                                        </div>
+                                        <div class="roster-block flex h-full min-h-[46px] w-full items-center justify-center p-0 text-xs font-bold tracking-wide {{ $blocks[$cellStatus] ?? $blocks[''] }}">{{ $cellText }}</div>
                                     @endif
                                 </td>
                             @endforeach
@@ -165,6 +183,20 @@
                 </tbody>
             </table>
         </div>
+
+        @if($isManager)
+            <div x-show="selectedDates.length > 0" x-cloak class="fixed bottom-4 left-1/2 z-[70] flex w-[min(100%-1.5rem,56rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-lg dark:border-slate-700 dark:bg-[#1E1F23]">
+                <span class="px-2 text-sm font-medium" x-text="selectedDates.length + (selectedDates.length === 1 ? ' day' : ' days') + ' selected for ' + selectedUserName"></span>
+                <button type="button" class="rounded-full bg-emerald-200/85 px-3 py-1.5 text-xs font-bold text-emerald-950" x-on:click="applyBulk('SHIFT')">ON</button>
+                <button type="button" class="rounded-full bg-red-200/85 px-3 py-1.5 text-xs font-bold text-red-950" x-on:click="applyBulk('OFF')">OFF</button>
+                <button type="button" class="rounded-full bg-amber-200/90 px-3 py-1.5 text-xs font-bold text-amber-950" x-on:click="applyBulk('AL')">AL</button>
+                <button type="button" class="rounded-full bg-orange-200/90 px-3 py-1.5 text-xs font-bold text-orange-950" x-on:click="applyBulk('SL')">SL</button>
+                <button type="button" class="rounded-full bg-purple-200/85 px-3 py-1.5 text-xs font-bold text-purple-950" x-on:click="applyBulk('PH')">PH</button>
+                <button type="button" class="rounded-full bg-neutral-950 px-3 py-1.5 text-xs font-bold text-white" x-on:click="applyBulk('BLACK')">Black Shift</button>
+                <button type="button" class="btn-outlined state-layer h-8 px-3 text-xs" x-on:click="applyBulk(null)">Clear</button>
+                <button type="button" class="btn-text state-layer h-8 px-3 text-xs" x-on:click="clearSelection()">Cancel</button>
+            </div>
+        @endif
 
         @if($todayInMonth)
             <section class="m3-card mt-4 !p-4">
@@ -196,6 +228,7 @@
                             <option value="DP">DP · Day pending</option>
                             <option value="SL">SL · Sick leave</option>
                             <option value="PH">PH · Public holiday</option>
+                            <option value="BLACK">Black shift · Ended</option>
                         </select>
                     </label>
                     <div class="mt-6 flex justify-end gap-2">
@@ -227,7 +260,7 @@
                     <div class="border-r border-b border-outline-variant px-1 py-2 text-center text-[11px] font-medium tracking-wide text-on-surface-variant nth-[7n]:border-r-0 {{ in_array($weekday, ['Sat', 'Sun'], true) ? 'bg-day-off' : 'bg-surface-lowest' }}">{{ $weekday }}</div>
                 @endforeach
                 @for($blank = 0; $blank < $leadingBlankDays; $blank++)
-                    <div class="min-h-16 border-r border-b border-outline-variant nth-[7n]:border-r-0 {{ $blank >= 5 ? 'bg-day-off' : 'bg-surface-lowest' }}"></div>
+                    <div class="min-h-[68px] border-r border-b border-outline-variant sm:min-h-16 nth-[7n]:border-r-0 {{ $blank >= 5 ? 'bg-day-off' : 'bg-surface-lowest' }}"></div>
                 @endfor
                 @foreach($days as $day)
                     @php
@@ -235,17 +268,25 @@
                         $isRed = $day->isWeekend() || $dayTasks->contains(fn ($task) => $task->kind === 'holiday');
                         $cellBg = $day->isToday() ? 'bg-today' : ($day->isWeekend() ? 'bg-day-off' : 'bg-surface-lowest');
                     @endphp
-                    <div data-calendar-day="{{ $day->toDateString() }}" @if($isRed) data-red-day="{{ $day->toDateString() }}" @endif class="group flex min-h-16 flex-col border-r border-b border-outline-variant p-1.5 nth-[7n]:border-r-0 {{ $cellBg }}" x-on:click="if ($event.target.closest('button')) return; addHint = @js($day->toDateString())">
+                    <div data-calendar-day="{{ $day->toDateString() }}" @if($isRed) data-red-day="{{ $day->toDateString() }}" @endif class="group flex min-h-[68px] cursor-pointer flex-col border-r border-b border-outline-variant p-1 nth-[7n]:border-r-0 sm:min-h-16 sm:cursor-default sm:p-1.5 {{ $cellBg }}" x-on:click="openCalendarDay($event, @js($day->toDateString()), @js($day->format('l, j F Y')))">
                         <div class="flex h-6 items-center justify-between gap-1 px-0.5">
                             <span class="text-sm font-medium text-on-surface">{{ $day->day }}</span>
                             <button
                                 type="button"
-                                class="pointer-events-none rounded-md px-1 text-[10px] font-semibold text-primary opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100"
+                                class="pointer-events-none hidden rounded-md px-1 text-[10px] font-semibold text-primary opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 sm:block"
                                 :class="addHint === @js($day->toDateString()) && '!pointer-events-auto !opacity-100'"
                                 x-on:click.stop="openTask(@js($day->toDateString()), @js($day->format('l, j F Y')))"
                             >+ Add</button>
                         </div>
-                        <div class="space-y-1" data-day-items>
+                        <div data-day-marks class="mt-auto flex items-center gap-1 sm:hidden" aria-hidden="true">
+                            @foreach($dayTasks->take(2) as $mark)
+                                <span class="h-1.5 min-w-2 flex-1 rounded-full {{ $markFor($mark->kind) }}"></span>
+                            @endforeach
+                            @if($dayTasks->count() > 2)
+                                <span class="text-[10px] font-semibold leading-none text-on-surface-variant">+{{ $dayTasks->count() - 2 }}</span>
+                            @endif
+                        </div>
+                        <div class="hidden space-y-1 sm:block" data-day-items>
                             @php
                                 $tasksOnDay = $dayTasks->where('kind', 'task')->values();
                                 $tasksGrouped = false;
@@ -258,12 +299,14 @@
                                             <span class="block text-[10px] font-medium tracking-wide">Task</span>
                                             <ol class="mt-0.5 list-decimal space-y-1 pl-4">
                                                 @foreach($tasksOnDay as $groupedTask)
-                                                    <li class="break-words whitespace-normal marker:font-medium {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}">
+                                                    <li class="marker:font-medium {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}">
                                                         <button
                                                             type="button"
                                                             data-task-id="{{ $groupedTask->id }}"
                                                             data-task-title
-                                                            class="w-full text-left font-medium {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}"
+                                                            data-kind="task"
+                                                            data-done="{{ $groupedTask->is_done ? '1' : '0' }}"
+                                                            class="line-clamp-2 w-full break-normal text-left font-medium {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}"
                                                             x-on:click="openEdit(@js(['id' => $groupedTask->id, 'date' => $groupedTask->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $groupedTask->title, 'kind' => $groupedTask->kind, 'done' => (bool) $groupedTask->is_done]))"
                                                         >{{ $groupedTask->title }}</button>
                                                     </li>
@@ -275,11 +318,13 @@
                                     <button
                                         type="button"
                                         data-task-id="{{ $task->id }}"
-                                        class="w-full rounded-lg px-2 py-1.5 text-left text-xs leading-snug break-words whitespace-normal {{ $chipFor($task->kind) }} {{ $task->is_done ? 'line-through opacity-60' : '' }}"
+                                        data-kind="{{ $task->kind }}"
+                                        data-done="{{ $task->is_done ? '1' : '0' }}"
+                                        class="w-full rounded-lg px-2 py-1.5 text-left text-xs leading-snug {{ $chipFor($task->kind) }} {{ $task->is_done ? 'line-through opacity-60' : '' }}"
                                         x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
                                     >
                                         <span class="block text-[10px] font-medium tracking-wide">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
-                                        <span class="block font-medium" data-task-title>{{ $task->title }}</span>
+                                        <span class="line-clamp-2 block break-normal font-medium" data-task-title>{{ $task->title }}</span>
                                     </button>
                                 @endif
                             @endforeach
@@ -288,7 +333,7 @@
                 @endforeach
                 @php $filled = ($leadingBlankDays + count($days)) % 7; @endphp
                 @for($blank = 0; $blank < (7 - $filled) % 7; $blank++)
-                    <div class="min-h-16 border-r border-b border-outline-variant nth-[7n]:border-r-0 {{ ($filled + $blank) >= 5 ? 'bg-day-off' : 'bg-surface-lowest' }}"></div>
+                    <div class="min-h-[68px] border-r border-b border-outline-variant sm:min-h-16 nth-[7n]:border-r-0 {{ ($filled + $blank) >= 5 ? 'bg-day-off' : 'bg-surface-lowest' }}"></div>
                 @endfor
             </div>
             </div>
@@ -312,7 +357,7 @@
                                 $task->updated_by_name ? 'Edited by '.$task->updated_by_name : null,
                             ])->filter()->implode(' · ');
                         @endphp
-                        <li data-today-task="{{ $task->id }}" data-date="{{ $task->date->toDateString() }}" class="flex items-start gap-2 rounded-xl px-1 py-1">
+                        <li data-today-task="{{ $task->id }}" data-date="{{ $task->date->toDateString() }}" data-created-by="{{ $task->created_by_name }}" data-updated-by="{{ $task->updated_by_name }}" class="flex items-start gap-2 rounded-xl px-1 py-1">
                             <input type="checkbox" class="m3-check mt-1" @checked($task->is_done) aria-label="Mark {{ $task->title }} complete" x-on:change="toggleTodayTask($event.target)">
                             <div class="min-w-0 flex-1">
                                 <button
@@ -337,62 +382,67 @@
                 </ul>
             </section>
 
+            <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-[#1E1F23]">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h3 class="text-base font-medium">{{ "Today's Events" }}</h3>
+                    <button type="button" class="btn-tonal state-layer h-9 px-3 text-sm" x-on:click="openEvent(@js($today->toDateString()), @js($today->format('l, j F Y')))">+ Add event</button>
+                </div>
+                <ul data-today-events class="mt-3 space-y-2">
+                    @forelse($todayEvents as $event)
+                        @php
+                            $eventByline = collect([
+                                $event->created_by_name ? 'Added by '.$event->created_by_name : null,
+                                $event->updated_by_name ? 'Edited by '.$event->updated_by_name : null,
+                            ])->filter()->implode(' · ');
+                        @endphp
+                        <li data-today-event="{{ $event->id }}" data-date="{{ $event->date->toDateString() }}" data-created-by="{{ $event->created_by_name }}" data-updated-by="{{ $event->updated_by_name }}" class="flex items-start gap-2 rounded-xl px-1 py-1">
+                            <span class="m3-chip mt-0.5 shrink-0 border-0 bg-primary-container text-on-primary-container">Event</span>
+                            <div class="min-w-0 flex-1">
+                                <button
+                                    type="button"
+                                    data-task-id="{{ $event->id }}"
+                                    data-task-title
+                                    class="w-full text-left text-sm font-medium break-words"
+                                    x-on:click="openEdit(@js(['id' => $event->id, 'date' => $event->date->toDateString(), 'label' => $today->format('l, j F Y'), 'title' => $event->title, 'kind' => 'event', 'done' => false]))"
+                                >{{ $event->title }}</button>
+                                <p data-task-byline class="text-xs text-on-surface-variant" @if($eventByline === '') hidden @endif>{{ $eventByline }}</p>
+                            </div>
+                            <button type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-on-surface-variant hover:bg-surface-high" aria-label="Edit {{ $event->title }}" x-on:click="openEdit(@js(['id' => $event->id, 'date' => $event->date->toDateString(), 'label' => $today->format('l, j F Y'), 'title' => $event->title, 'kind' => 'event', 'done' => false]))">
+                                <x-icon name="edit" class="text-[18px]" />
+                            </button>
+                            <button type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-error hover:bg-error-container" aria-label="Remove {{ $event->title }}" x-on:click="removeTodayEvent(@js($event->id))">
+                                <x-icon name="delete" class="text-[18px]" />
+                            </button>
+                        </li>
+                    @empty
+                        <li data-today-events-empty class="text-sm text-on-surface-variant">No events for today.</li>
+                    @endforelse
+                </ul>
+            </section>
+
             <div class="m3-card mt-6">
                 <h3 class="text-base font-medium">Upcoming</h3>
-                @if($upcoming->isEmpty())
-                    <p class="mt-3 text-sm text-on-surface-variant">Nothing in {{ $next->format('F Y') }}.</p>
-                @else
-                    <ul class="mt-2">
-                        @php
-                            $upcomingByDate = $upcoming->groupBy(fn ($task) => $task->date->toDateString());
-                        @endphp
-                        @foreach($upcomingByDate as $items)
-                            @php
-                                $dateTasks = $items->where('kind', 'task')->values();
-                                $tasksListed = false;
-                            @endphp
-                            @foreach($items as $task)
-                                @if($task->kind === 'task' && $dateTasks->count() > 1)
-                                    @if(! $tasksListed)
-                                        @php $tasksListed = true; @endphp
-                                        <li class="rounded-2xl px-2 py-2 row-hover">
-                                            <div class="text-sm">
-                                                <span class="font-medium">{{ $dateTasks->first()->date->format('j M Y') }}</span>
-                                                <span class="ml-2 m3-chip border-0 bg-success-container text-on-success-container">Task</span>
-                                            </div>
-                                            <ol class="mt-1 list-decimal space-y-1 pl-5 text-sm">
-                                                @foreach($dateTasks as $groupedTask)
-                                                    <li class="break-words whitespace-normal {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}">
-                                                        <button
-                                                            type="button"
-                                                            data-task-id="{{ $groupedTask->id }}"
-                                                            data-task-title
-                                                            class="w-full text-left {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}"
-                                                            x-on:click="openEdit(@js(['id' => $groupedTask->id, 'date' => $groupedTask->date->toDateString(), 'label' => $groupedTask->date->format('l, j F Y'), 'title' => $groupedTask->title, 'kind' => $groupedTask->kind, 'done' => (bool) $groupedTask->is_done]))"
-                                                        >{{ $groupedTask->title }}</button>
-                                                    </li>
-                                                @endforeach
-                                            </ol>
-                                        </li>
-                                    @endif
-                                @else
-                                    <li>
-                                        <button
-                                            type="button"
-                                            data-task-id="{{ $task->id }}"
-                                            class="row-hover w-full break-words whitespace-normal rounded-2xl px-2 py-2 text-left text-sm {{ $task->is_done ? 'line-through opacity-60' : '' }}"
-                                            x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $task->date->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
-                                        >
-                                            <span class="font-medium">{{ $task->date->format('j M Y') }}</span>
-                                            <span class="ml-2 m3-chip border-0 {{ $chipFor($task->kind) }}">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
-                                            <span class="ml-2" data-task-title>{{ $task->title }}</span>
-                                        </button>
-                                    </li>
-                                @endif
-                            @endforeach
-                        @endforeach
-                    </ul>
-                @endif
+                <ul data-upcoming class="mt-2">
+                    @forelse($upcoming as $task)
+                        <li data-upcoming-id="{{ $task->id }}">
+                            <button
+                                type="button"
+                                data-task-id="{{ $task->id }}"
+                                data-kind="{{ $task->kind }}"
+                                data-done="{{ $task->is_done ? '1' : '0' }}"
+                                data-date="{{ $task->date->toDateString() }}"
+                                class="row-hover w-full rounded-2xl px-2 py-2 text-left text-sm {{ $task->is_done ? 'line-through opacity-60' : '' }}"
+                                x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $task->date->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
+                            >
+                                <span class="font-medium" data-upcoming-date>{{ $task->date->format('j M Y') }}</span>
+                                <span data-upcoming-kind class="ml-2 m3-chip border-0 {{ $chipFor($task->kind) }}">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
+                                <span class="ml-2" data-task-title>{{ $task->title }}</span>
+                            </button>
+                        </li>
+                    @empty
+                        <li data-upcoming-empty class="px-2 py-2 text-sm text-on-surface-variant">No upcoming events or tasks in the next 30 days.</li>
+                    @endforelse
+                </ul>
             </div>
         </section>
 
@@ -400,6 +450,15 @@
             <x-icon name="add" />
             Add item
         </button>
+
+        <div x-show="dayOpen" x-cloak class="m3-scrim sm:hidden" x-on:click.self="dayOpen = false" x-on:keydown.escape.window="dayOpen = false">
+            <div class="m3-sheet" role="dialog" aria-modal="true" aria-labelledby="day-sheet-title">
+                <div class="m3-handle"></div>
+                <h2 id="day-sheet-title" class="text-[22px] leading-7" x-text="dayLabel"></h2>
+                <ul data-day-sheet class="mt-4 max-h-[50vh] space-y-2 overflow-y-auto"></ul>
+                <button type="button" class="btn-tonal state-layer mt-4 h-11 w-full text-sm" x-on:click="openTask(dayDate, dayLabel); dayOpen = false">+ Add item</button>
+            </div>
+        </div>
 
         <div x-show="taskOpen" x-cloak class="m3-scrim" x-on:click.self="taskOpen = false" x-on:keydown.escape.window="taskOpen = false">
             <div class="m3-sheet sm:max-w-sm">

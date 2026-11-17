@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\Role;
 use App\Models\User;
+use App\Support\Pin;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -20,24 +21,71 @@ class AuthController extends Controller
     {
         $credentials = $request->validate([
             'username' => ['required', 'string'],
-            'pin' => ['required', 'digits:4'],
+            'pin' => ['required', 'regex:/^\d{4,}$/'],
         ]);
 
         $user = User::query()
             ->whereRaw('lower(username) = ?', [mb_strtolower(trim($credentials['username']))])
             ->first();
 
-        if (! $user || ! $this->accountIsActive($user) || ! hash_equals((string) $user->pin, $credentials['pin'])) {
+        if (! $user || ! $this->accountIsActive($user)) {
             throw ValidationException::withMessages([
                 'username' => 'Those credentials do not match an active account.',
             ]);
         }
+
+        if ($user->is_locked) {
+            throw ValidationException::withMessages([
+                'username' => 'This account is locked. Ask an IT Manager to unlock it.',
+            ]);
+        }
+
+        if (! Pin::matches($user, $credentials['pin'])) {
+            $attempts = $user->failed_login_attempts + 1;
+            $locked = $attempts >= 5;
+            $user->forceFill([
+                'failed_login_attempts' => $attempts,
+                'is_locked' => $locked,
+            ])->save();
+
+            throw ValidationException::withMessages([
+                'username' => $locked
+                    ? 'This account is locked. Ask an IT Manager to unlock it.'
+                    : 'Those credentials do not match an active account.',
+            ]);
+        }
+
+        $user->forceFill([
+            'failed_login_attempts' => 0,
+            'pin' => Pin::isHashed((string) $user->pin) ? $user->pin : Pin::hash($credentials['pin']),
+        ])->save();
 
         $request->session()->regenerate();
         $request->session()->put('roster_user_id', $user->id);
         $request->session()->forget('impersonator_id');
 
         return redirect()->intended(route('roster.index'));
+    }
+
+    public function updatePin(Request $request): RedirectResponse
+    {
+        /** @var User $user */
+        $user = $request->attributes->get('rosterUser');
+
+        $data = $request->validate([
+            'current_pin' => ['required', 'string'],
+            'pin' => ['required', 'regex:/^\d{6,}$/', 'confirmed'],
+        ]);
+
+        if (! Pin::matches($user, $data['current_pin'])) {
+            throw ValidationException::withMessages([
+                'current_pin' => 'The current PIN does not match.',
+            ]);
+        }
+
+        $user->forceFill(['pin' => Pin::hash($data['pin'])])->save();
+
+        return back()->with('status', 'PIN updated.');
     }
 
     public function logout(Request $request): RedirectResponse

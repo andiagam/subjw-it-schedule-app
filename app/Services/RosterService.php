@@ -140,25 +140,37 @@ class RosterService
         $inserts = [];
         $shiftIds = [];
         $offIds = [];
+        $blackIds = [];
         $now = now()->toDateTimeString();
         $changed = 0;
 
         foreach ($this->activeUsers() as $user) {
+            $endDate = $user->end_date?->toDateString();
+
             for ($day = $start; $day->lte($end); $day = $day->addDay()) {
-                if (isset($holidays[$day->toDateString()])) {
+                $date = $day->toDateString();
+                $pastEnd = $endDate !== null && $date > $endDate;
+
+                if (! $pastEnd && isset($holidays[$date])) {
                     continue;
                 }
 
-                $status = $this->templateStatus($user, $day);
-                $entry = $existing->get($user->id.'|'.$day->toDateString());
+                $status = $pastEnd ? 'BLACK' : $this->templateStatus($user, $day);
+                $entry = $existing->get($user->id.'|'.$date);
 
                 if ($entry instanceof RosterEntry) {
-                    if (! in_array($entry->status, ['SHIFT', 'OFF'], true) || $entry->status === $status) {
+                    if ($entry->status === 'BLACK' || $entry->status === $status) {
+                        continue;
+                    }
+
+                    if (in_array($entry->status, ['AL', 'DP', 'SL', 'PH'], true)) {
                         continue;
                     }
 
                     if ($status === 'SHIFT') {
                         $shiftIds[] = $entry->id;
+                    } elseif ($status === 'BLACK') {
+                        $blackIds[] = $entry->id;
                     } else {
                         $offIds[] = $entry->id;
                     }
@@ -170,7 +182,7 @@ class RosterService
 
                 $inserts[] = [
                     'user_id' => $user->id,
-                    'date' => $day->toDateString(),
+                    'date' => $date,
                     'status' => $status,
                     'note' => $status === 'SHIFT' ? '08:00 - 17:00' : null,
                     'created_at' => $now,
@@ -195,6 +207,14 @@ class RosterService
         foreach (array_chunk($offIds, 100) as $ids) {
             RosterEntry::query()->whereIn('id', $ids)->update([
                 'status' => 'OFF',
+                'note' => null,
+                'updated_at' => $now,
+            ]);
+        }
+
+        foreach (array_chunk($blackIds, 100) as $ids) {
+            RosterEntry::query()->whereIn('id', $ids)->update([
+                'status' => 'BLACK',
                 'note' => null,
                 'updated_at' => $now,
             ]);
@@ -292,7 +312,7 @@ class RosterService
             ->get(['id', 'user_id', 'date', 'status']);
 
         $byKey = $entries->keyBy(fn (RosterEntry $entry) => $entry->user_id.'|'.$entry->date->toDateString());
-        $preserve = ['AL', 'DP', 'SL', 'OFF', 'PH'];
+        $preserve = ['AL', 'DP', 'SL', 'OFF', 'PH', 'BLACK'];
         $toUpdate = [];
         $toInsert = [];
         $now = now()->toDateTimeString();

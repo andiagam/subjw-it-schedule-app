@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\Role;
 use App\Models\User;
+use App\Support\Pin;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -63,8 +64,33 @@ class TeamController extends Controller
         return redirect()->route('team.index')->with('status', $user->name.' archived.');
     }
 
+    public function unlock(User $user): RedirectResponse
+    {
+        $user->forceFill([
+            'is_locked' => false,
+            'failed_login_attempts' => 0,
+        ])->save();
+
+        return redirect()->route('team.index')->with('status', $user->name.' unlocked.');
+    }
+
+    public function resetPin(Request $request, User $user): RedirectResponse
+    {
+        $data = $request->validate([
+            'pin' => ['required', 'regex:/^\d{6,}$/', 'confirmed'],
+        ]);
+
+        $user->forceFill([
+            'pin' => Pin::hash($data['pin']),
+            'is_locked' => false,
+            'failed_login_attempts' => 0,
+        ])->save();
+
+        return redirect()->route('team.index')->with('status', 'PIN reset for '.$user->name.'.');
+    }
+
     /**
-     * @return array{name: string, username: string, job_title: string, role: string, pin: string, al_balance: int, dp_balance: int}
+     * @return array{name: string, username: string, job_title: string, role: string, al_balance: int, dp_balance: int, end_date: ?string, pin?: string}
      */
     private function validated(Request $request, ?User $user = null): array
     {
@@ -73,15 +99,23 @@ class TeamController extends Controller
             'username' => ['required', 'string', 'max:50', 'alpha_dash', Rule::unique('users', 'username')->ignore($user?->id)],
             'job_title' => ['required', 'string', 'max:120'],
             'role' => ['required', Rule::enum(Role::class)],
-            'pin' => ['required', 'digits:4'],
+            'pin' => [$user ? 'nullable' : 'required', 'regex:/^\d{6,}$/'],
             'al_balance' => ['required', 'integer', 'min:0', 'max:999'],
             'dp_balance' => ['required', 'integer', 'min:0', 'max:999'],
+            'end_date' => ['nullable', 'date'],
         ]);
 
         $data['name'] = trim($data['name']);
         $data['job_title'] = trim($data['job_title']);
         $data['al_balance'] = (int) $data['al_balance'];
         $data['dp_balance'] = (int) $data['dp_balance'];
+        $data['end_date'] = $data['end_date'] ?? null;
+
+        if (filled($data['pin'] ?? null)) {
+            $data['pin'] = Pin::hash($data['pin']);
+        } else {
+            unset($data['pin']);
+        }
 
         return $data;
     }

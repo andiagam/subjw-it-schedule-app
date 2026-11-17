@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Support\Pin;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -19,7 +20,8 @@ class TeamTest extends TestCase
             'username' => 'newhire',
             'job_title' => 'IT Trainee',
             'role' => 'IT Trainee',
-            'pin' => '4444',
+            'pin' => '444444',
+            'end_date' => '2026-12-31',
             'al_balance' => 6,
             'dp_balance' => 0,
         ])->assertRedirect(route('team.index'));
@@ -33,20 +35,23 @@ class TeamTest extends TestCase
             'username' => 'newhire',
             'job_title' => 'IT Officer',
             'role' => 'IT Staff',
-            'pin' => '5555',
+            'pin' => '555555',
             'al_balance' => 20,
             'dp_balance' => 3,
+            'end_date' => '2026-12-31',
         ])->assertRedirect(route('team.index'));
 
         $hire->refresh();
         $this->assertSame(20, $hire->al_balance);
         $this->assertSame(3, $hire->dp_balance);
-        $this->assertSame('5555', $hire->pin);
+        $this->assertTrue(Pin::matches($hire, '555555'));
+        $this->assertSame('2026-12-31', $hire->end_date?->toDateString());
 
         $this->actingAsRoster($manager)
             ->get(route('team.index'))
             ->assertOk()
-            ->assertDontSee('>5555<', false);
+            ->assertDontSee('>555555<', false)
+            ->assertSee('End date');
 
         $this->actingAsRoster($manager)
             ->delete(route('team.archive', $hire))
@@ -59,7 +64,7 @@ class TeamTest extends TestCase
 
         $this->post('/login', [
             'username' => 'newhire',
-            'pin' => '5555',
+            'pin' => '555555',
         ])->assertSessionHasErrors('username');
     }
 
@@ -83,7 +88,6 @@ class TeamTest extends TestCase
             'username' => $manager->username,
             'job_title' => $manager->job_title,
             'role' => 'IT Staff',
-            'pin' => $manager->pin,
             'al_balance' => $manager->al_balance,
             'dp_balance' => $manager->dp_balance,
         ])->assertSessionHas('error');

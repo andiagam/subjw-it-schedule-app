@@ -218,10 +218,13 @@ class RosterTest extends TestCase
             ->assertOk()
             ->assertSee('Christmas')
             ->assertSee('Public holiday')
-            ->assertSee("New Year's Day")
-            ->assertSee("Isra and Mi'raj")
+            ->assertSee('No upcoming events or tasks in the next 30 days.')
+            ->assertSee('hidden flex-wrap items-center gap-x-4 gap-y-2 text-xs text-on-surface-variant sm:flex', false)
             ->assertSee("Today's Tasks")
             ->assertSee('No tasks for today.')
+            ->assertSee("Today's Events")
+            ->assertSee('No events for today.')
+            ->assertSee('+ Add event')
             ->assertSee('Activity Log')
             ->assertDontSee('Hover or tap a date')
             ->assertDontSee('The IT manager edits any schedule directly')
@@ -232,9 +235,22 @@ class RosterTest extends TestCase
         $sql = strtolower($queries->implode("\n"));
         $logQuery = $logged->first(fn (array $query) => str_contains(strtolower($query['query']), 'task_activity_logs'));
 
-        $this->assertSame(6, $queries->count(), $queries->implode("\n"));
+        $this->assertSame(7, $queries->count(), $queries->implode("\n"));
         $this->assertStringNotContainsString('exists', $sql);
         $this->assertStringNotContainsString('::date', $sql);
+        $upcomingQuery = $logged->first(function (array $query) {
+            $statement = strtolower($query['query']);
+
+            return str_contains($statement, 'day_tasks')
+                && str_contains($statement, 'between')
+                && in_array('2026-11-18', $query['bindings'], true)
+                && in_array('2026-12-17', $query['bindings'], true);
+        });
+        $this->assertNotNull($upcomingQuery);
+        $upcomingSql = strtolower($upcomingQuery['query']);
+        $this->assertMatchesRegularExpression('/order by .*date.*id/', $upcomingSql);
+        $this->assertStringNotContainsString('users', $upcomingSql);
+        $this->assertStringNotContainsString('exists', $upcomingSql);
         $this->assertNotNull($logQuery);
         $this->assertStringContainsString('limit 30', strtolower($logQuery['query']));
         $this->assertStringNotContainsString('users', strtolower($logQuery['query']));
@@ -279,6 +295,11 @@ class RosterTest extends TestCase
             'status' => 'SHIFT',
             'note' => '08:00 - 17:00',
         ]);
+        RosterEntry::query()->create([
+            'user_id' => $manager->id,
+            'date' => '2026-11-03',
+            'status' => 'BLACK',
+        ]);
 
         $response = $this->actingAsRoster($manager)->get(route('roster.export', [
             'month' => 11,
@@ -298,6 +319,21 @@ class RosterTest extends TestCase
         $this->assertSame('IT Manager', $sheet->getCell('A2')->getValue());
         $this->assertSame('ON', (string) $sheet->getCell('D2')->getValue());
         $this->assertSame('FFA7F3D0', $sheet->getStyle('D2')->getFill()->getStartColor()->getARGB());
+        $this->assertSame('', (string) $sheet->getCell('E2')->getValue());
+        $this->assertSame('FF000000', $sheet->getStyle('E2')->getFill()->getStartColor()->getARGB());
+        $onColumn = null;
+
+        for ($index = 1; $index <= 40; $index++) {
+            $column = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($index);
+
+            if ($sheet->getCell($column.'1')->getValue() === 'ON') {
+                $onColumn = $column;
+                break;
+            }
+        }
+
+        $this->assertNotNull($onColumn);
+        $this->assertSame(1, (int) $sheet->getCell($onColumn.'2')->getValue());
 
         @unlink($path);
     }
@@ -344,5 +380,140 @@ class RosterTest extends TestCase
             ->assertSee('Bernard')
             ->assertSee('ON')
             ->assertDontSee('08:00 - 17:00');
+    }
+
+    public function test_black_shift_stays_put_and_days_after_the_end_date_are_filled_black(): void
+    {
+        Carbon::setTestNow('2026-11-17');
+        $manager = User::factory()->manager()->create(['name' => 'Andi Agam']);
+        $trainee = User::factory()->create([
+            'name' => 'Bernard',
+            'username' => 'trainee2',
+            'role' => 'IT Trainee',
+            'end_date' => '2026-11-10',
+        ]);
+
+        RosterEntry::query()->create([
+            'user_id' => $trainee->id,
+            'date' => '2026-11-04',
+            'status' => 'BLACK',
+        ]);
+        RosterEntry::query()->create([
+            'user_id' => $trainee->id,
+            'date' => '2026-11-12',
+            'status' => 'AL',
+            'note' => 'Booked',
+        ]);
+
+        $this->actingAsRoster($manager)->post(route('roster.autofill'), [
+            'month' => 11,
+            'year' => 2026,
+        ])->assertRedirect();
+
+        $this->assertSame('BLACK', RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-04')->value('status'));
+        $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-10')->value('status'));
+        $this->assertSame('BLACK', RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-11')->value('status'));
+        $this->assertSame('AL', RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-12')->value('status'));
+
+        RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-17')->update(['status' => 'BLACK']);
+
+        $page = $this->actingAsRoster($manager)
+            ->get(route('roster.index', ['month' => 11, 'year' => 2026]))
+            ->assertOk()
+            ->assertSee('Black shift (Ended)')
+            ->assertSee('Multi-select');
+
+        $this->assertDoesNotMatchRegularExpression('/Working:<\/span>[^<]*Bernard/', $page->getContent());
+        $this->assertDoesNotMatchRegularExpression('/Not set:<\/span>[^<]*Bernard/', $page->getContent());
+        $this->assertMatchesRegularExpression('/Working:<\/span>[^<]*'.$manager->name.'/', $page->getContent());
+    }
+
+    public function test_manager_updates_many_days_in_one_roster_write(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $staff = User::factory()->create(['name' => 'Bernard']);
+
+        $this->actingAsRoster($staff)->postJson(route('roster.bulk-update'), [
+            'user_id' => $staff->id,
+            'dates' => ['2026-11-02', '2026-11-03'],
+            'status' => 'OFF',
+        ])->assertForbidden();
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->actingAsRoster($manager)->postJson(route('roster.bulk-update'), [
+            'user_id' => $staff->id,
+            'dates' => ['2026-11-02', '2026-11-03', '2026-11-04'],
+            'status' => 'BLACK',
+        ])->assertOk();
+
+        $writes = collect(DB::getQueryLog())
+            ->filter(fn (array $query) => str_contains(strtolower($query['query']), 'roster_entries'));
+
+        $this->assertCount(1, $writes);
+        $this->assertStringContainsString('on conflict', strtolower($writes->first()['query']));
+        $this->assertSame(3, RosterEntry::query()->where('user_id', $staff->id)->where('status', 'BLACK')->count());
+
+        $this->actingAsRoster($manager)->postJson(route('roster.bulk-update'), [
+            'user_id' => $staff->id,
+            'dates' => ['2026-11-02'],
+            'status' => null,
+        ])->assertOk();
+
+        $this->assertDatabaseMissing('roster_entries', [
+            'user_id' => $staff->id,
+            'date' => '2026-11-02',
+        ]);
+    }
+
+    public function test_upcoming_lists_the_next_thirty_days_from_jakarta_today(): void
+    {
+        Carbon::setTestNow('2026-11-17');
+        $staff = User::factory()->create();
+
+        DayTask::query()->create(['date' => '2026-10-15', 'title' => 'October task', 'kind' => 'task', 'user_id' => $staff->id]);
+        DayTask::query()->create(['date' => '2026-10-15', 'title' => 'October event', 'kind' => 'event', 'user_id' => $staff->id]);
+        DayTask::query()->create(['date' => '2026-10-15', 'title' => 'October extra', 'kind' => 'task', 'user_id' => $staff->id]);
+        DayTask::query()->create(['date' => '2026-10-16', 'title' => 'October holiday', 'kind' => 'holiday', 'user_id' => $staff->id]);
+        DayTask::query()->create(['date' => '2026-11-17', 'title' => 'Today only', 'kind' => 'task', 'user_id' => $staff->id]);
+        DayTask::query()->create(['date' => '2026-11-18', 'title' => 'Tomorrow item', 'kind' => 'event', 'user_id' => $staff->id]);
+        DayTask::query()->create(['date' => '2026-12-17', 'title' => 'Horizon check', 'kind' => 'task', 'user_id' => $staff->id, 'is_done' => true]);
+        DayTask::query()->create(['date' => '2026-12-18', 'title' => 'Past horizon', 'kind' => 'holiday', 'user_id' => $staff->id]);
+
+        $october = $this->actingAsRoster($staff)->get(route('roster.index', ['month' => 10, 'year' => 2026]));
+        $october->assertOk()
+            ->assertSee('Tomorrow item')
+            ->assertSee('Horizon check')
+            ->assertSee('Today only')
+            ->assertSee('min-h-[68px]', false)
+            ->assertSee('line-clamp-2', false)
+            ->assertSee('data-day-sheet', false)
+            ->assertSee('bg-emerald-500', false)
+            ->assertSee('bg-blue-500', false)
+            ->assertSee('bg-purple-600', false)
+            ->assertSee('+1', false)
+            ->assertDontSee('break-all', false);
+
+        $upcoming = $this->upcomingMarkup($october->getContent());
+        $this->assertStringContainsString('Tomorrow item', $upcoming);
+        $this->assertStringContainsString('Horizon check', $upcoming);
+        $this->assertStringNotContainsString('Today only', $upcoming);
+        $this->assertStringNotContainsString('Past horizon', $upcoming);
+
+        $january = $this->actingAsRoster($staff)->get(route('roster.index', ['month' => 1, 'year' => 2027]));
+        $januaryUpcoming = $this->upcomingMarkup($january->getContent());
+        $this->assertStringContainsString('Tomorrow item', $januaryUpcoming);
+        $this->assertStringContainsString('Horizon check', $januaryUpcoming);
+        $this->assertStringNotContainsString('Past horizon', $januaryUpcoming);
+    }
+
+    private function upcomingMarkup(string $html): string
+    {
+        $start = strpos($html, 'data-upcoming');
+        $this->assertNotFalse($start);
+        $end = strpos($html, '</ul>', $start);
+
+        return substr($html, $start, $end - $start);
     }
 }

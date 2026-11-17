@@ -7,7 +7,7 @@ use Carbon\CarbonImmutable;
 class Dates
 {
     /**
-     * Inclusive calendar-day count. The application timezone is UTC, so each day is 86400 seconds.
+     * Inclusive calendar-day count. Asia/Jakarta has no daylight-saving shift, so each day is 86400 seconds.
      */
     public static function inclusiveDays(string $start, string $end): int
     {

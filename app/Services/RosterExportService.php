@@ -83,6 +83,7 @@ class RosterExportService
             'DP' => 'FFC7D2FE',
             'SL' => 'FFFBCFE8',
             'PH' => 'FFFECDD3',
+            'BLACK' => 'FF000000',
         ];
 
         foreach ($users as $rowIndex => $user) {
@@ -106,9 +107,18 @@ class RosterExportService
                     continue;
                 }
 
-                $sheet->setCellValue($cell, $entry->status === 'SHIFT' ? 'ON' : $entry->status);
+                $label = match ($entry->status) {
+                    'SHIFT' => 'ON',
+                    'BLACK' => '',
+                    default => $entry->status,
+                };
+                $sheet->setCellValue($cell, $label);
                 $sheet->getStyle($cell)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->getStyle($cell)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($statusColors[$entry->status] ?? 'FFFFFFFF');
+
+                if ($entry->status === 'BLACK') {
+                    $sheet->getStyle($cell)->getFont()->getColor()->setARGB('FFFFFFFF');
+                }
             }
 
             $summaryStart = count($days) + 3;

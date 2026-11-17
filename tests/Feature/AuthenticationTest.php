@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Support\Pin;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -81,7 +82,109 @@ class AuthenticationTest extends TestCase
         $this->get(route('login'))
             ->assertOk()
             ->assertSee('Sign in')
+            ->assertSee('Use your username and PIN (min. 6 digits).')
             ->assertDontSee('1234')
             ->assertDontSee('Demo accounts');
+    }
+
+    public function test_a_stored_four_digit_pin_still_signs_in_and_five_failures_lock_the_account(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'legacy',
+            'pin' => '2208',
+        ]);
+
+        $this->post('/login', [
+            'username' => 'legacy',
+            'pin' => '2208',
+        ])->assertRedirect(route('roster.index'));
+
+        $user->refresh();
+        $this->assertTrue(Pin::isHashed((string) $user->pin));
+        $this->assertTrue(Pin::matches($user, '2208'));
+        auth()->logout();
+        session()->flush();
+
+        $locked = User::factory()->create([
+            'username' => 'locked',
+            'pin' => '1111',
+        ]);
+
+        for ($attempt = 1; $attempt <= 4; $attempt++) {
+            $this->post('/login', [
+                'username' => 'locked',
+                'pin' => '0000',
+            ])->assertSessionHasErrors('username');
+        }
+
+        $this->assertFalse($locked->refresh()->is_locked);
+
+        $this->post('/login', [
+            'username' => 'locked',
+            'pin' => '0000',
+        ])->assertSessionHasErrors('username');
+
+        $this->assertTrue($locked->refresh()->is_locked);
+        $this->assertSame(5, $locked->failed_login_attempts);
+
+        $this->post('/login', [
+            'username' => 'locked',
+            'pin' => '1111',
+        ])->assertSessionHasErrors('username');
+        $this->assertNull(session('roster_user_id'));
+    }
+
+    public function test_anyone_can_change_their_own_pin_and_only_a_manager_can_reset_another(): void
+    {
+        $staff = User::factory()->create(['pin' => '1234']);
+        $manager = User::factory()->manager()->create();
+
+        $this->actingAsRoster($staff)->post(route('account.pin'), [
+            'current_pin' => '0000',
+            'pin' => '123456',
+            'pin_confirmation' => '123456',
+        ])->assertSessionHasErrors('current_pin');
+
+        $this->actingAsRoster($staff)->post(route('account.pin'), [
+            'current_pin' => '1234',
+            'pin' => '12345',
+            'pin_confirmation' => '12345',
+        ])->assertSessionHasErrors('pin');
+
+        $this->actingAsRoster($staff)->post(route('account.pin'), [
+            'current_pin' => '1234',
+            'pin' => '123456',
+            'pin_confirmation' => '123456',
+        ])->assertRedirect()->assertSessionHas('status');
+
+        $this->assertTrue(Pin::matches($staff->refresh(), '123456'));
+
+        $this->actingAsRoster($staff)
+            ->post(route('team.pin', $manager), [
+                'pin' => '654321',
+                'pin_confirmation' => '654321',
+            ])->assertForbidden();
+
+        $staff->forceFill(['is_locked' => true, 'failed_login_attempts' => 5])->save();
+
+        $this->actingAsRoster($manager)->post(route('team.unlock', $staff))->assertRedirect();
+        $this->assertFalse($staff->refresh()->is_locked);
+        $this->assertSame(0, $staff->failed_login_attempts);
+
+        $staff->forceFill(['is_locked' => true, 'failed_login_attempts' => 5])->save();
+
+        $this->actingAsRoster($manager)->post(route('team.pin', $staff), [
+            'pin' => '654321',
+            'pin_confirmation' => '654321',
+        ])->assertRedirect()->assertSessionHas('status');
+
+        $staff->refresh();
+        $this->assertFalse($staff->is_locked);
+        $this->assertTrue(Pin::matches($staff, '654321'));
+
+        $this->actingAsRoster($manager)
+            ->get(route('team.index'))
+            ->assertOk()
+            ->assertSee('Change PIN', false);
     }
 }

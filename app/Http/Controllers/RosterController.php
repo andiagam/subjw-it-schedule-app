@@ -13,6 +13,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\View as ViewFacade;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -27,10 +28,12 @@ class RosterController extends Controller
         $users = $roster->activeUsers();
         $entries = $roster->entriesForMonth($start);
 
-        $today = CarbonImmutable::now()->startOfDay();
+        $today = CarbonImmutable::now('Asia/Jakarta')->startOfDay();
         $todayKey = $today->toDateString();
+        $tomorrow = $today->addDay();
+        $horizon = $today->addDays(30);
         $rangeStart = min($start->toDateString(), $todayKey);
-        $rangeEnd = max($start->addMonth()->endOfMonth()->toDateString(), $todayKey);
+        $rangeEnd = max($monthEnd->toDateString(), $todayKey);
 
         $calendar = DayTask::query()
             ->whereBetween('date', [$rangeStart, $rangeEnd])
@@ -42,12 +45,18 @@ class RosterController extends Controller
             ->filter(fn (DayTask $task) => $task->date->greaterThanOrEqualTo($start) && $task->date->lessThanOrEqualTo($monthEnd))
             ->groupBy(fn (DayTask $task) => $task->date->toDateString());
 
-        $upcoming = $calendar
-            ->filter(fn (DayTask $task) => $task->date->greaterThan($monthEnd) && $task->date->lessThanOrEqualTo($start->addMonth()->endOfMonth()) && ! $task->is_done)
-            ->values();
+        $upcoming = DayTask::query()
+            ->whereBetween('date', [$tomorrow->toDateString(), $horizon->toDateString()])
+            ->orderBy('date')
+            ->orderBy('id')
+            ->get();
 
         $todayTasks = $calendar
             ->filter(fn (DayTask $task) => $task->kind === 'task' && $task->date->toDateString() === $todayKey)
+            ->values();
+
+        $todayEvents = $calendar
+            ->filter(fn (DayTask $task) => $task->kind === 'event' && $task->date->toDateString() === $todayKey)
             ->values();
 
         $activityLogs = TaskActivityLog::query()->latest()->limit(30)->get();
@@ -71,6 +80,9 @@ class RosterController extends Controller
             'tasks' => $tasks,
             'upcoming' => $upcoming,
             'todayTasks' => $todayTasks,
+            'todayEvents' => $todayEvents,
+            'upcomingStart' => $tomorrow->toDateString(),
+            'upcomingEnd' => $horizon->toDateString(),
             'activityLogs' => $activityLogs,
             'leadingBlankDays' => $start->dayOfWeekIso - 1,
         ]);
@@ -81,7 +93,7 @@ class RosterController extends Controller
         $data = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
             'date' => ['required', 'date'],
-            'status' => ['required', Rule::in(['SHIFT', 'OFF', 'AL', 'DP', 'SL', 'PH'])],
+            'status' => ['required', Rule::in(['SHIFT', 'OFF', 'AL', 'DP', 'SL', 'PH', 'BLACK'])],
             'note' => ['nullable', 'string', 'max:120'],
         ]);
 
@@ -123,13 +135,62 @@ class RosterController extends Controller
         return back()->with('status', 'Schedule updated.');
     }
 
+    public function bulkUpdate(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'dates' => ['required', 'array', 'min:1', 'max:31'],
+            'dates.*' => ['required', 'date'],
+            'status' => ['present', 'nullable', Rule::in(['SHIFT', 'OFF', 'AL', 'DP', 'SL', 'PH', 'BLACK'])],
+        ]);
+
+        $user = User::query()->whereKey($data['user_id'])->where('is_active', true)->first();
+
+        if (! $user) {
+            return response()->json(['message' => 'That employee is not active.'], 422);
+        }
+
+        $dates = collect($data['dates'])
+            ->map(fn (string $date) => CarbonImmutable::parse($date)->toDateString())
+            ->unique()
+            ->values();
+        $status = $data['status'];
+
+        DB::transaction(function () use ($user, $dates, $status) {
+            if ($status === null) {
+                RosterEntry::query()->where('user_id', $user->id)->whereIn('date', $dates)->delete();
+
+                return;
+            }
+
+            $now = now();
+            $rows = $dates->map(fn (string $date) => [
+                'user_id' => $user->id,
+                'date' => $date,
+                'status' => $status,
+                'note' => $status === 'SHIFT' ? '08:00 - 17:00' : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ])->all();
+
+            RosterEntry::query()->upsert($rows, ['user_id', 'date'], ['status', 'note', 'updated_at']);
+        });
+
+        return response()->json([
+            'message' => 'Schedule updated.',
+            'user_id' => $user->id,
+            'dates' => $dates->all(),
+            'status' => $status,
+        ]);
+    }
+
     public function autofill(Request $request, RosterService $roster): RedirectResponse
     {
         $start = $roster->monthStart($request->input('month'), $request->input('year'));
         $created = $roster->autofill($start);
         $message = $created === 0
-            ? 'Nothing to fill. Leave, sick days, day pending, and public holidays were left as they are.'
-            : 'Updated '.$created.' working days. Leave, sick days, day pending, and public holidays were left unchanged.';
+            ? 'Nothing to fill. Leave, sick days, day pending, public holidays, and black shifts were left as they are.'
+            : 'Updated '.$created.' days. Leave, sick days, day pending, public holidays, and black shifts stayed as they are. Days after an end date were marked black.';
 
         return redirect()
             ->route('roster.index', ['month' => $start->month, 'year' => $start->year])

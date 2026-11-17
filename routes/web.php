@@ -14,6 +14,7 @@ Route::middleware('guest.roster')->group(function () {
 
 Route::middleware('auth.roster')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    Route::post('/account/pin', [AuthController::class, 'updatePin'])->name('account.pin');
     Route::post('/switch-user', [AuthController::class, 'switchUser'])->name('switch-user');
 
     Route::get('/', [RosterController::class, 'index'])->name('roster.index');
@@ -26,6 +27,7 @@ Route::middleware('auth.roster')->group(function () {
 
     Route::middleware('manager.only')->group(function () {
         Route::post('/roster/entries', [RosterController::class, 'upsert'])->name('roster.upsert');
+        Route::post('/roster/bulk-update', [RosterController::class, 'bulkUpdate'])->name('roster.bulk-update');
         Route::post('/roster/autofill', [RosterController::class, 'autofill'])->name('roster.autofill');
         Route::get('/roster/export', [RosterController::class, 'export'])->name('roster.export');
 
@@ -35,6 +37,8 @@ Route::middleware('auth.roster')->group(function () {
         Route::get('/team', [TeamController::class, 'index'])->name('team.index');
         Route::post('/team', [TeamController::class, 'store'])->name('team.store');
         Route::put('/team/{user}', [TeamController::class, 'update'])->name('team.update');
+        Route::post('/team/{user}/unlock', [TeamController::class, 'unlock'])->name('team.unlock');
+        Route::post('/team/{user}/pin', [TeamController::class, 'resetPin'])->name('team.pin');
         Route::delete('/team/{user}', [TeamController::class, 'archive'])->name('team.archive');
     });
 });

@@ -32,7 +32,7 @@ class DayTaskController extends Controller
 
         $logs = [];
 
-        if ($data['kind'] === 'task') {
+        if ($this->recordsActivity($data['kind'])) {
             $logs[] = $activity->record($task->id, $task->title, $task->date->toDateString(), 'added', $user);
         }
 
@@ -65,7 +65,7 @@ class DayTaskController extends Controller
         ]);
 
         $logs = [];
-        $tracked = $originalKind === 'task' || $data['kind'] === 'task';
+        $tracked = $this->recordsActivity($originalKind) || $this->recordsActivity($data['kind']);
 
         if ($tracked && $contentChanged) {
             $logs[] = $activity->record($dayTask->id, $dayTask->title, $dayTask->date->toDateString(), 'edited', $user);
@@ -94,7 +94,7 @@ class DayTaskController extends Controller
         $date = $dayTask->date;
         $logs = [];
 
-        if ($dayTask->kind === 'task') {
+        if ($this->recordsActivity($dayTask->kind)) {
             $logs[] = $activity->record($dayTask->id, $dayTask->title, $date->toDateString(), 'removed', $user);
         }
 
@@ -130,6 +130,11 @@ class DayTaskController extends Controller
         return redirect()
             ->route('roster.index', ['month' => $task->date->month, 'year' => $task->date->year])
             ->with('status', $message);
+    }
+
+    private function recordsActivity(string $kind): bool
+    {
+        return $kind === 'task' || $kind === 'event';
     }
 
     private function actor(Request $request): User

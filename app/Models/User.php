@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 
-#[Fillable(['name', 'username', 'job_title', 'role', 'pin', 'al_balance', 'dp_balance', 'is_active'])]
+#[Fillable(['name', 'username', 'job_title', 'role', 'pin', 'al_balance', 'dp_balance', 'is_active', 'end_date', 'failed_login_attempts', 'is_locked'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -21,12 +21,19 @@ class User extends Authenticatable
      *
      * @return array<string, string>
      */
+    protected $hidden = [
+        'pin',
+    ];
+
     protected function casts(): array
     {
         return [
             'al_balance' => 'integer',
             'dp_balance' => 'integer',
             'is_active' => 'boolean',
+            'end_date' => 'date',
+            'failed_login_attempts' => 'integer',
+            'is_locked' => 'boolean',
         ];
     }
 
