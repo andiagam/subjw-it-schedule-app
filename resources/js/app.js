@@ -573,6 +573,8 @@ document.addEventListener('alpine:init', () => {
 
             document.querySelectorAll('[data-pending-upcoming]').forEach((row) => {
                 delete row.dataset.pendingUpcoming;
+                row.dataset.id = String(task.id);
+                row.dataset.date = task.date;
                 row.dataset.upcomingId = String(task.id);
             });
 
@@ -1328,14 +1330,15 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            list.querySelector('[data-upcoming-empty]')?.remove();
             const pending = !task.id;
             const done = task.kind === 'task' && Boolean(task.is_done);
             const item = document.createElement('li');
+            item.dataset.date = task.date;
 
             if (pending) {
                 item.dataset.pendingUpcoming = '1';
             } else {
+                item.dataset.id = String(task.id);
                 item.dataset.upcomingId = String(task.id);
             }
 
@@ -1381,6 +1384,7 @@ document.addEventListener('alpine:init', () => {
             item.appendChild(button);
             list.appendChild(item);
             this.remember(() => item.remove());
+            this.renderOrSortUpcoming();
         },
         syncUpcoming(task) {
             if (!task?.date) {
@@ -1394,23 +1398,32 @@ document.addEventListener('alpine:init', () => {
             }
 
             const id = task.id ? String(task.id) : '';
-            const node = id ? list.querySelector(`[data-task-id="${CSS.escape(id)}"]`) : list.querySelector('[data-pending-task]');
+            const node = id
+                ? list.querySelector(`[data-id="${CSS.escape(id)}"], [data-task-id="${CSS.escape(id)}"]`)
+                : list.querySelector('[data-pending-upcoming], [data-pending-task]');
+            const row = node?.matches('li') ? node : node?.closest('li');
 
             if (!this.inUpcoming(task.date)) {
-                (node?.closest('li') || node)?.remove();
-                this.showUpcomingEmpty();
+                row?.remove();
+                this.renderOrSortUpcoming();
 
                 return;
             }
 
-            if (!node) {
+            if (!row) {
                 this.insertUpcoming(task);
-                this.showUpcomingEmpty();
 
                 return;
             }
 
-            const button = node.matches('button') ? node : node.closest('button');
+            row.dataset.date = task.date;
+
+            if (id) {
+                row.dataset.id = id;
+                row.dataset.upcomingId = id;
+            }
+
+            const button = row.querySelector('button') || (node?.matches('button') ? node : null);
             const done = task.kind === 'task' && Boolean(task.is_done);
 
             if (button) {
@@ -1439,33 +1452,55 @@ document.addEventListener('alpine:init', () => {
                 }
             }
 
-            this.showUpcomingEmpty();
+            this.renderOrSortUpcoming();
         },
-        showUpcomingEmpty() {
+        renderOrSortUpcoming() {
             const list = document.querySelector('[data-upcoming]');
 
             if (!list) {
                 return;
             }
 
-            const hasItem = list.querySelector('[data-task-id], [data-pending-task]');
+            [...list.querySelectorAll(':scope > li[data-date]')].forEach((row) => {
+                if (!this.inUpcoming(row.dataset.date)) {
+                    row.remove();
+                }
+            });
+
+            const rows = [...list.querySelectorAll(':scope > li[data-date]')];
+            rows.sort((left, right) => {
+                const byDate = (left.dataset.date || '').localeCompare(right.dataset.date || '');
+
+                if (byDate !== 0) {
+                    return byDate;
+                }
+
+                return Number(left.dataset.id || 0) - Number(right.dataset.id || 0);
+            });
+            rows.forEach((row) => list.appendChild(row));
+
             const empty = list.querySelector('[data-upcoming-empty]');
 
-            if (hasItem) {
+            if (rows.length > 0) {
                 empty?.remove();
 
                 return;
             }
 
             if (empty) {
+                list.appendChild(empty);
+
                 return;
             }
 
-            const item = document.createElement('li');
-            item.dataset.upcomingEmpty = '';
-            item.className = 'px-2 py-2 text-sm text-on-surface-variant';
-            item.textContent = 'No upcoming events or tasks in the next 30 days.';
-            list.appendChild(item);
+            const placeholder = document.createElement('li');
+            placeholder.dataset.upcomingEmpty = '';
+            placeholder.className = 'px-2 py-2 text-sm text-on-surface-variant';
+            placeholder.textContent = 'No upcoming events or tasks in the next 30 days.';
+            list.appendChild(placeholder);
+        },
+        showUpcomingEmpty() {
+            this.renderOrSortUpcoming();
         },
         formatDay(value) {
             const [year, month, day] = String(value).split('-').map(Number);

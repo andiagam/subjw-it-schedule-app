@@ -504,6 +504,7 @@ class RosterTest extends TestCase
         $this->assertStringContainsString('Horizon check', $upcoming);
         $this->assertStringNotContainsString('Today only', $upcoming);
         $this->assertStringNotContainsString('Past horizon', $upcoming);
+        $this->assertMatchesRegularExpression('/data-id="\d+" data-date="2026-11-18".*data-id="\d+" data-date="2026-12-17"/s', $upcoming);
 
         $january = $this->actingAsRoster($staff)->get(route('roster.index', ['month' => 1, 'year' => 2027]));
         $januaryUpcoming = $this->upcomingMarkup($january->getContent());

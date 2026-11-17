@@ -424,7 +424,7 @@
                 <h3 class="text-base font-medium">Upcoming</h3>
                 <ul data-upcoming class="mt-2">
                     @forelse($upcoming as $task)
-                        <li data-upcoming-id="{{ $task->id }}">
+                        <li data-id="{{ $task->id }}" data-date="{{ $task->date->toDateString() }}" data-upcoming-id="{{ $task->id }}">
                             <button
                                 type="button"
                                 data-task-id="{{ $task->id }}"
