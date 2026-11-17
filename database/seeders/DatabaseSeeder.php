@@ -16,13 +16,33 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $people = [
-            ['name' => 'IT Manager', 'username' => 'manager', 'job_title' => 'IT Manager', 'role' => Role::Manager->value, 'pin' => '1234', 'al_balance' => 12, 'dp_balance' => 2],
-            ['name' => 'IT Officer', 'username' => 'officer', 'job_title' => 'IT Officer', 'role' => Role::Staff->value, 'pin' => '1111', 'al_balance' => 12, 'dp_balance' => 1],
-            ['name' => 'IT Trainee 1', 'username' => 'trainee1', 'job_title' => 'IT Trainee', 'role' => Role::Trainee->value, 'pin' => '2222', 'al_balance' => 6, 'dp_balance' => 0],
-            ['name' => 'IT Trainee 2', 'username' => 'trainee2', 'job_title' => 'IT Trainee', 'role' => Role::Trainee->value, 'pin' => '3333', 'al_balance' => 6, 'dp_balance' => 0],
+            ['name' => 'Andi Agam', 'username' => 'aagam648', 'job_title' => 'IT Manager', 'role' => Role::Manager->value, 'pin' => '2208', 'al_balance' => 12, 'dp_balance' => 2],
+            ['name' => 'Bintang', 'username' => 'tnbin839', 'job_title' => 'IT Officer', 'role' => Role::Staff->value, 'pin' => '1111', 'al_balance' => 12, 'dp_balance' => 1],
+            ['name' => 'Kholis', 'username' => 'trainee1', 'job_title' => 'IT Trainee', 'role' => Role::Trainee->value, 'pin' => '2222', 'al_balance' => 6, 'dp_balance' => 0],
+            ['name' => 'Bernard', 'username' => 'trainee2', 'job_title' => 'IT Trainee', 'role' => Role::Trainee->value, 'pin' => '3333', 'al_balance' => 6, 'dp_balance' => 0],
         ];
 
-        $users = collect($people)->map(fn (array $person) => User::query()->create($person));
+        $users = collect($people)->map(function (array $person) {
+            $user = User::query()->firstOrNew(['username' => $person['username']]);
+            $isNew = ! $user->exists;
+
+            $user->fill([
+                'name' => $person['name'],
+                'job_title' => $person['job_title'],
+                'role' => $person['role'],
+                'pin' => $person['pin'],
+                'is_active' => true,
+            ]);
+
+            if ($isNew) {
+                $user->al_balance = $person['al_balance'];
+                $user->dp_balance = $person['dp_balance'];
+            }
+
+            $user->save();
+
+            return $user;
+        });
 
         $start = CarbonImmutable::now()->startOfMonth();
         $end = $start->endOfMonth();
@@ -31,12 +51,16 @@ class DatabaseSeeder extends Seeder
             for ($day = $start; $day->lte($end); $day = $day->addDay()) {
                 $weekend = $day->isWeekend();
 
-                RosterEntry::query()->create([
-                    'user_id' => $user->id,
-                    'date' => $day->toDateString(),
-                    'status' => $weekend ? 'OFF' : 'SHIFT',
-                    'note' => $weekend ? null : '08:00 - 17:00',
-                ]);
+                RosterEntry::query()->firstOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'date' => $day->toDateString(),
+                    ],
+                    [
+                        'status' => $weekend ? 'OFF' : 'SHIFT',
+                        'note' => $weekend ? null : '08:00 - 17:00',
+                    ],
+                );
             }
         }
     }

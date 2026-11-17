@@ -23,9 +23,11 @@ class AuthController extends Controller
             'pin' => ['required', 'digits:4'],
         ]);
 
-        $user = User::query()->where('username', $credentials['username'])->first();
+        $user = User::query()
+            ->whereRaw('lower(username) = ?', [mb_strtolower(trim($credentials['username']))])
+            ->first();
 
-        if (! $user || ! $user->is_active || ! hash_equals($user->pin, $credentials['pin'])) {
+        if (! $user || ! $this->accountIsActive($user) || ! hash_equals((string) $user->pin, $credentials['pin'])) {
             throw ValidationException::withMessages([
                 'username' => 'Those credentials do not match an active account.',
             ]);
@@ -76,6 +78,17 @@ class AuthController extends Controller
         $request->session()->put('roster_user_id', $target->id);
 
         return back()->with('status', 'Switched to '.$target->name.'.');
+    }
+
+    private function accountIsActive(User $user): bool
+    {
+        $value = $user->is_active;
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return in_array(strtolower((string) $value), ['1', 't', 'true', 'yes', 'on'], true);
     }
 
     private function managerImpersonator(): ?User

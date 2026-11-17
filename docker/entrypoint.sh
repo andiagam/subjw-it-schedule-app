@@ -17,15 +17,18 @@ db_connection="${DB_CONNECTION:-pgsql}"
 if [ "$db_connection" = "pgsql" ]; then
     php artisan migrate --force --no-interaction
 
-    user_count="$(php -r '
+    needs_seed="$(php -r '
         require "/app/vendor/autoload.php";
         $app = require "/app/bootstrap/app.php";
         $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
         $kernel->bootstrap();
-        fwrite(STDOUT, (string) Illuminate\Support\Facades\DB::table("users")->count());
-    ')"
+        $users = Illuminate\Support\Facades\DB::table("users");
+        $empty = (int) (clone $users)->count() === 0;
+        $missing = $empty || (clone $users)->where("username", "aagam648")->doesntExist();
+        fwrite(STDOUT, $missing ? "1" : "0");
+    ' | tr -cd "0-9")"
 
-    if [ "$user_count" = "0" ]; then
+    if [ "$needs_seed" = "1" ]; then
         php artisan db:seed --force --no-interaction
     fi
 elif [ "$db_connection" = "sqlite" ]; then

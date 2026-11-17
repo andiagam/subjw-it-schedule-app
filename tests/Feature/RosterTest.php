@@ -237,9 +237,12 @@ class RosterTest extends TestCase
         $this->seed();
 
         $this->assertDatabaseHas('users', [
-            'username' => 'manager',
+            'username' => 'aagam648',
+            'name' => 'Andi Agam',
             'role' => 'IT Manager',
-            'pin' => '1234',
+            'job_title' => 'IT Manager',
+            'pin' => '2208',
+            'is_active' => true,
             'al_balance' => 12,
             'dp_balance' => 2,
         ]);
@@ -249,15 +252,16 @@ class RosterTest extends TestCase
             'dp_balance' => 0,
         ]);
 
-        $manager = User::query()->where('username', 'manager')->first();
+        $manager = User::query()->where('username', 'aagam648')->first();
         $this->assertSame('OFF', RosterEntry::query()->where('user_id', $manager->id)->whereDate('date', '2026-11-01')->value('status'));
         $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $manager->id)->whereDate('date', '2026-11-02')->value('status'));
 
         $this->actingAsRoster($manager)
             ->get(route('roster.index', ['month' => 11, 'year' => 2026]))
             ->assertOk()
-            ->assertSee('IT Officer')
-            ->assertSee('IT Trainee 1')
+            ->assertSee('Bintang')
+            ->assertSee('Kholis')
+            ->assertSee('Bernard')
             ->assertSee('ON')
             ->assertDontSee('08:00 - 17:00');
     }

@@ -35,7 +35,7 @@
 
     <div>
         <header
-            class="sticky top-0 z-30 border-b border-outline-variant bg-surface-lowest"
+            class="{{ $currentUser ? 'sticky top-0 z-30 border-b border-outline-variant bg-surface-lowest' : 'absolute inset-x-0 top-0 z-30' }}"
             x-data="{ lifted: false }"
             x-on:scroll.window="lifted = window.scrollY > 4"
             :class="lifted && 'shadow-sm'"
@@ -128,7 +128,7 @@
             </div>
         @endif
 
-        <main class="{{ $currentUser ? 'px-6 py-6 pb-24 lg:px-8' : 'grid min-h-[calc(100vh-4rem)] place-items-center px-4 py-8' }}">
+        <main class="{{ $currentUser ? 'px-6 py-6 pb-24 lg:px-8' : 'min-h-screen flex items-center justify-center p-4' }}">
             <div class="{{ $currentUser ? 'mx-auto w-full max-w-[1600px]' : 'w-full max-w-md' }}">
                 @if($errors->any())
                     <div class="mb-4 rounded-xl bg-error-container px-4 py-3 text-sm text-on-error-container">
