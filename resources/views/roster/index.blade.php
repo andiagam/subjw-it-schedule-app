@@ -65,7 +65,7 @@
             <x-month-nav :start="$start" :previous="$previous" :next="$next" />
             @if($isManager)
                 <div class="flex items-center gap-2">
-                    <form method="POST" action="{{ route('roster.autofill') }}" onsubmit="return confirm('Fill empty days this month? Weekdays become ON, weekends become OFF. Public holidays and existing entries stay as they are.')">
+                    <form method="POST" action="{{ route('roster.autofill') }}" onsubmit="return confirm('Fill this month from each person\'s default week? Empty cells and regular ON/OFF days are updated. Annual leave, sick leave, day pending, and public holidays stay as they are.')">
                         @csrf
                         <input type="hidden" name="month" value="{{ $start->month }}">
                         <input type="hidden" name="year" value="{{ $start->year }}">
@@ -88,18 +88,18 @@
             @endforeach
         </div>
 
-        <div data-month-board data-roster-scroll class="m3-card max-h-[70vh] overflow-auto !p-0">
+        <div data-month-board data-roster-scroll class="relative z-0 m3-card max-h-[70vh] overflow-auto !p-0">
             <table class="min-w-max border-separate border-spacing-0 text-xs">
                 <thead>
                     <tr>
-                        <th class="sticky top-0 left-0 z-30 w-36 min-w-36 bg-surface-lowest px-3 py-2 text-left shadow-[4px_0_8px_-6px_rgba(15,23,42,0.28)] sm:w-48">Employee</th>
+                        <th class="sticky top-0 left-0 z-30 w-36 min-w-36 border-r border-b border-slate-200 bg-white px-3 py-2 text-left dark:border-slate-800 dark:bg-[#1E1F23] sm:w-48">Employee</th>
                         @foreach($days as $day)
                             @php
                                 $dayTasks = $tasks[$day->toDateString()] ?? collect();
                                 $holidayName = $dayTasks->where('kind', 'holiday')->pluck('title')->implode(', ');
                                 $isRed = $day->isWeekend() || $holidayName !== '';
                             @endphp
-                            <th @if($isRed) data-red-day="{{ $day->toDateString() }}" @endif @if($day->isToday()) data-today="1" @endif @if($holidayName !== '') title="{{ $holidayName }}" @endif class="sticky top-0 z-20 w-12 min-w-12 border-b border-outline-variant px-1 py-2 text-center {{ $day->isToday() ? 'bg-today' : ($isRed ? 'bg-day-off' : 'bg-surface-lowest') }}">
+                            <th @if($isRed) data-red-day="{{ $day->toDateString() }}" @endif @if($day->isToday()) data-today="1" @endif @if($holidayName !== '') title="{{ $holidayName }}" @endif class="sticky top-0 z-20 w-12 min-w-12 border-b border-outline-variant px-1 py-2 text-center {{ $day->isToday() ? 'bg-today' : ($isRed ? 'bg-day-off' : 'bg-white dark:bg-[#1E1F23]') }}">
                                 <div class="text-sm font-medium text-on-surface">{{ $day->day }}</div>
                                 <div class="text-[10px] text-on-surface-variant">{{ $day->format('D') }}</div>
                             </th>
@@ -109,7 +109,7 @@
                 <tbody>
                     @forelse($users as $user)
                         <tr>
-                            <th class="sticky left-0 z-10 w-36 min-w-36 border-b border-outline-variant bg-surface-lowest px-3 py-2 text-left shadow-[4px_0_8px_-6px_rgba(15,23,42,0.28)] sm:w-48">
+                            <th class="sticky left-0 z-10 w-36 min-w-36 border-r border-b border-slate-200 bg-white px-3 py-2 text-left dark:border-slate-800 dark:bg-[#1E1F23] sm:w-48">
                                 <div class="font-medium text-on-surface">{{ $user->name }}</div>
                                 <div class="font-normal text-on-surface-variant">{{ $user->job_title }}</div>
                             </th>

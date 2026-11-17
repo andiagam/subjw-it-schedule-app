@@ -102,6 +102,57 @@ class RosterTest extends TestCase
         ]);
     }
 
+    public function test_autofill_uses_each_persons_default_and_keeps_leave(): void
+    {
+        Carbon::setTestNow('2026-11-17');
+        $manager = User::factory()->manager()->create();
+        $bintang = User::factory()->create([
+            'name' => 'Bintang',
+            'username' => 'tnbin839',
+            'role' => 'IT Staff',
+        ]);
+        $trainee = User::factory()->create([
+            'name' => 'Kholis',
+            'username' => 'trainee1',
+            'role' => 'IT Trainee',
+        ]);
+
+        RosterEntry::query()->create([
+            'user_id' => $bintang->id,
+            'date' => '2026-11-05',
+            'status' => 'SHIFT',
+            'note' => '08:00 - 17:00',
+        ]);
+        RosterEntry::query()->create([
+            'user_id' => $bintang->id,
+            'date' => '2026-11-07',
+            'status' => 'OFF',
+        ]);
+        foreach (['AL' => '2026-11-02', 'SL' => '2026-11-03', 'DP' => '2026-11-04', 'PH' => '2026-11-09'] as $status => $date) {
+            RosterEntry::query()->create([
+                'user_id' => $bintang->id,
+                'date' => $date,
+                'status' => $status,
+            ]);
+        }
+
+        $this->actingAsRoster($manager)->post(route('roster.autofill'), [
+            'month' => 11,
+            'year' => 2026,
+        ])->assertRedirect();
+
+        $this->assertSame('OFF', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-05')->value('status'));
+        $this->assertSame('OFF', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-06')->value('status'));
+        $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-07')->value('status'));
+        $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-01')->value('status'));
+        $this->assertSame('AL', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-02')->value('status'));
+        $this->assertSame('SL', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-03')->value('status'));
+        $this->assertSame('DP', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-04')->value('status'));
+        $this->assertSame('PH', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-09')->value('status'));
+        $this->assertSame('OFF', RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-01')->value('status'));
+        $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-02')->value('status'));
+    }
+
     public function test_public_holidays_are_seeded_once_and_the_roster_page_stays_light(): void
     {
         Carbon::setTestNow('2026-11-17');
@@ -263,8 +314,16 @@ class RosterTest extends TestCase
         ]);
 
         $manager = User::query()->where('username', 'aagam648')->first();
+        $bintang = User::query()->where('username', 'tnbin839')->first();
+        $trainee = User::query()->where('username', 'trainee1')->first();
         $this->assertSame('OFF', RosterEntry::query()->where('user_id', $manager->id)->whereDate('date', '2026-11-01')->value('status'));
         $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $manager->id)->whereDate('date', '2026-11-02')->value('status'));
+        $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-01')->value('status'));
+        $this->assertSame('OFF', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-05')->value('status'));
+        $this->assertSame('OFF', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-06')->value('status'));
+        $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $bintang->id)->whereDate('date', '2026-11-07')->value('status'));
+        $this->assertSame('OFF', RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-01')->value('status'));
+        $this->assertSame('SHIFT', RosterEntry::query()->where('user_id', $trainee->id)->whereDate('date', '2026-11-02')->value('status'));
 
         $this->actingAsRoster($manager)
             ->get(route('roster.index', ['month' => 11, 'year' => 2026]))

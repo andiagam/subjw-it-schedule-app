@@ -36,17 +36,17 @@
 
     <div>
         <header
-            class="{{ $currentUser ? 'sticky top-0 z-30 border-b border-outline-variant bg-surface-lowest' : 'absolute inset-x-0 top-0 z-30' }}"
+            class="{{ $currentUser ? 'sticky top-0 z-50 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-[#1E1F23]' : 'absolute inset-x-0 top-0 z-30' }}"
             x-data="{ lifted: false }"
             x-on:scroll.window="lifted = window.scrollY > 4"
             :class="lifted && 'shadow-sm'"
         >
-            <div class="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-2 gap-y-1 px-6 py-2 md:h-16 md:flex-nowrap md:py-0 lg:gap-3 lg:px-8">
+            <div class="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-2 px-4 py-2 sm:h-16 sm:flex-nowrap sm:gap-3 sm:px-6 sm:py-0 lg:px-8">
             @if($currentUser)
                 <a href="{{ route('roster.index') }}" aria-label="IT Roster" class="grid size-9 shrink-0 place-items-center rounded-xl bg-primary text-on-primary">
                     <x-icon name="event_available" filled class="text-[20px]" />
                 </a>
-                <nav class="order-last flex w-full min-w-0 items-center gap-1 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] md:order-none md:w-auto md:flex-1 md:pb-0 [&::-webkit-scrollbar]:hidden" aria-label="Primary">
+                <nav class="order-last flex w-full min-w-0 items-center gap-1 overflow-x-auto border-t border-slate-100 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:order-none sm:w-auto sm:flex-1 sm:border-t-0 sm:py-0 dark:border-slate-800 [&::-webkit-scrollbar]:hidden" aria-label="Primary">
                     @foreach($nav as $item)
                         @php $active = request()->routeIs($item['match']); @endphp
                         <a href="{{ route($item['route']) }}" data-nav @if($active) aria-current="page" @endif class="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm whitespace-nowrap sm:px-4 sm:py-2 {{ $active ? 'bg-secondary-container font-semibold text-on-secondary-container' : 'font-medium text-on-surface-variant hover:bg-surface-high' }}">
@@ -64,7 +64,7 @@
 
             <button
                 type="button"
-                class="ml-auto grid size-10 shrink-0 place-items-center rounded-full border border-outline-variant bg-surface-lowest text-on-surface hover:bg-surface-high md:ml-0"
+                class="ml-auto grid size-10 shrink-0 place-items-center rounded-full border border-outline-variant bg-surface-lowest text-on-surface hover:bg-surface-high sm:ml-0"
                 role="switch"
                 x-data="{ dark: document.documentElement.classList.contains('dark') }"
                 :aria-checked="dark.toString()"

@@ -78,7 +78,7 @@ class RosterExportService
 
         $statusColors = [
             'SHIFT' => 'FFA7F3D0',
-            'OFF' => 'FFE2E8F0',
+            'OFF' => 'FFFEE2E2',
             'AL' => 'FFFCD34D',
             'DP' => 'FFC7D2FE',
             'SL' => 'FFFBCFE8',

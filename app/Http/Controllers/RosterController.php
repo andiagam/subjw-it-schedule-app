@@ -114,8 +114,8 @@ class RosterController extends Controller
         $start = $roster->monthStart($request->input('month'), $request->input('year'));
         $created = $roster->autofill($start);
         $message = $created === 0
-            ? 'Every day this month is already filled. Public holidays were skipped.'
-            : 'Filled '.$created.' empty cells. Existing entries and public holidays were left unchanged.';
+            ? 'Nothing to fill. Leave, sick days, day pending, and public holidays were left as they are.'
+            : 'Updated '.$created.' working days. Leave, sick days, day pending, and public holidays were left unchanged.';
 
         return redirect()
             ->route('roster.index', ['month' => $start->month, 'year' => $start->year])

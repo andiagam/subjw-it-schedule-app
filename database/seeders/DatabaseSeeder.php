@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Enums\Role;
 use App\Models\RosterEntry;
 use App\Models\User;
+use App\Services\RosterService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 
@@ -13,7 +14,7 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      */
-    public function run(): void
+    public function run(RosterService $roster): void
     {
         $people = [
             ['name' => 'Andi Agam', 'username' => 'aagam648', 'job_title' => 'IT Manager', 'role' => Role::Manager->value, 'pin' => '2208', 'al_balance' => 12, 'dp_balance' => 2],
@@ -49,7 +50,7 @@ class DatabaseSeeder extends Seeder
 
         foreach ($users as $user) {
             for ($day = $start; $day->lte($end); $day = $day->addDay()) {
-                $weekend = $day->isWeekend();
+                $status = $roster->templateStatus($user, $day);
 
                 RosterEntry::query()->firstOrCreate(
                     [
@@ -57,8 +58,8 @@ class DatabaseSeeder extends Seeder
                         'date' => $day->toDateString(),
                     ],
                     [
-                        'status' => $weekend ? 'OFF' : 'SHIFT',
-                        'note' => $weekend ? null : '08:00 - 17:00',
+                        'status' => $status,
+                        'note' => $status === 'SHIFT' ? '08:00 - 17:00' : null,
                     ],
                 );
             }

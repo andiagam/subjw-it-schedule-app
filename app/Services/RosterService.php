@@ -40,8 +40,12 @@ class RosterService
         return $days;
     }
 
-    public function templateStatus(CarbonImmutable $day): string
+    public function templateStatus(User $user, CarbonImmutable $day): string
     {
+        if ($user->username === 'tnbin839') {
+            return in_array($day->dayOfWeekIso, [4, 5], true) ? 'OFF' : 'SHIFT';
+        }
+
         return $day->isWeekend() ? 'OFF' : 'SHIFT';
     }
 
@@ -126,37 +130,77 @@ class RosterService
 
     public function autofill(CarbonImmutable $start): int
     {
-        $end = $start->endOfMonth()->toDateString();
+        $end = $start->endOfMonth();
         $holidays = $this->holidayDates($start);
         $existing = RosterEntry::query()
-            ->whereBetween('date', [$start->toDateString(), $end])
-            ->get(['user_id', 'date'])
-            ->mapWithKeys(fn (RosterEntry $entry) => [$entry->user_id.'|'.$entry->date->toDateString() => true]);
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->get()
+            ->keyBy(fn (RosterEntry $entry) => $entry->user_id.'|'.$entry->date->toDateString());
 
-        $created = 0;
+        $inserts = [];
+        $shiftIds = [];
+        $offIds = [];
+        $now = now()->toDateTimeString();
+        $changed = 0;
 
         foreach ($this->activeUsers() as $user) {
-            for ($day = $start; $day->lte($start->endOfMonth()); $day = $day->addDay()) {
-                $key = $user->id.'|'.$day->toDateString();
-
-                if ($existing->has($key) || isset($holidays[$day->toDateString()])) {
+            for ($day = $start; $day->lte($end); $day = $day->addDay()) {
+                if (isset($holidays[$day->toDateString()])) {
                     continue;
                 }
 
-                $status = $this->templateStatus($day);
+                $status = $this->templateStatus($user, $day);
+                $entry = $existing->get($user->id.'|'.$day->toDateString());
 
-                RosterEntry::query()->create([
+                if ($entry instanceof RosterEntry) {
+                    if (! in_array($entry->status, ['SHIFT', 'OFF'], true) || $entry->status === $status) {
+                        continue;
+                    }
+
+                    if ($status === 'SHIFT') {
+                        $shiftIds[] = $entry->id;
+                    } else {
+                        $offIds[] = $entry->id;
+                    }
+
+                    $changed++;
+
+                    continue;
+                }
+
+                $inserts[] = [
                     'user_id' => $user->id,
                     'date' => $day->toDateString(),
                     'status' => $status,
                     'note' => $status === 'SHIFT' ? '08:00 - 17:00' : null,
-                ]);
-
-                $created++;
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+                $changed++;
             }
         }
 
-        return $created;
+        foreach (array_chunk($inserts, 100) as $rows) {
+            RosterEntry::query()->insert($rows);
+        }
+
+        foreach (array_chunk($shiftIds, 100) as $ids) {
+            RosterEntry::query()->whereIn('id', $ids)->update([
+                'status' => 'SHIFT',
+                'note' => '08:00 - 17:00',
+                'updated_at' => $now,
+            ]);
+        }
+
+        foreach (array_chunk($offIds, 100) as $ids) {
+            RosterEntry::query()->whereIn('id', $ids)->update([
+                'status' => 'OFF',
+                'note' => null,
+                'updated_at' => $now,
+            ]);
+        }
+
+        return $changed;
     }
 
     /**

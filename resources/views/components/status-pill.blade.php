@@ -3,7 +3,7 @@
 @php
     $styles = [
         'SHIFT' => 'bg-success-container text-on-success-container',
-        'OFF' => 'bg-surface-highest text-on-surface-variant',
+        'OFF' => 'bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300',
         'AL' => 'bg-warning-container text-on-warning-container',
         'DP' => 'bg-secondary-container text-on-secondary-container',
         'PENDING' => 'bg-secondary-container text-on-secondary-container',
