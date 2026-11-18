@@ -55,13 +55,15 @@ class LeaveApprovalService
                     throw new ApprovalException('The requested schedule status is missing.');
                 }
 
-                RosterEntry::query()->updateOrCreate(
-                    ['user_id' => $user->id, 'date' => $locked->start_date->toDateString()],
-                    [
-                        'status' => $status,
-                        'note' => $status === 'SHIFT' ? '08:00 - 17:00' : null,
-                    ],
-                );
+                foreach ($locked->dates() as $date) {
+                    RosterEntry::query()->updateOrCreate(
+                        ['user_id' => $user->id, 'date' => $date],
+                        [
+                            'status' => $status,
+                            'note' => $status === 'SHIFT' ? '08:00 - 17:00' : null,
+                        ],
+                    );
+                }
 
                 if ($creditDp) {
                     $user->increment('dp_balance');

@@ -25,11 +25,49 @@
             type: @js(old('type', 'AL')),
             start: @js(old('start_date', '')),
             end: @js(old('end_date', '')),
+            preview: '',
+            previewConflict: '',
             filter: 'ALL',
             reviewOpen: false,
             reviewAction: 'approve',
             reviewType: 'AL',
             actionUrl: '',
+            async refreshPreview() {
+                if (this.type !== 'SCHEDULE_CHANGE') {
+                    this.preview = '';
+                    this.previewConflict = '';
+                    return;
+                }
+
+                const raw = this.$root.querySelector('[data-picker-dates]')?.value || '';
+                let dates = [];
+
+                try {
+                    dates = JSON.parse(raw || '[]');
+                } catch (error) {
+                    dates = [];
+                }
+
+                if (!Array.isArray(dates) || dates.length === 0) {
+                    this.preview = '';
+                    this.previewConflict = '';
+                    return;
+                }
+
+                const params = new URLSearchParams();
+                dates.forEach((date) => params.append('dates[]', date));
+                const response = await fetch(@js(route('requests.preview')) + '?' + params.toString(), {
+                    headers: { Accept: 'application/json' },
+                });
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+                this.preview = data.summary || '';
+                this.previewConflict = data.conflict || '';
+            },
             openReview(id, type, action) {
                 this.reviewAction = action;
                 this.reviewType = type;
@@ -81,14 +119,12 @@
                                     <td class="px-3 py-3">
                                         <x-status-pill :status="$item->type" />
                                         @if($item->type === 'SCHEDULE_CHANGE')
-                                            <div class="mt-1 text-xs text-on-surface-variant">Change to {{ $item->requested_status }}</div>
+                                            <div class="mt-1 text-xs text-on-surface-variant">to {{ $item->requestedStatusLabel() }}</div>
                                         @else
                                             <div class="mt-1 text-xs text-on-surface-variant">{{ $item->dayCount() }} {{ $item->dayCount() === 1 ? 'day' : 'days' }}</div>
                                         @endif
                                     </td>
-                                    <td class="px-3 py-3 whitespace-nowrap">
-                                        {{ $item->start_date->equalTo($item->end_date) ? $item->start_date->format('d M Y') : $item->start_date->format('d M Y').' – '.$item->end_date->format('d M Y') }}
-                                    </td>
+                                    <td class="px-3 py-3">{{ $item->dateSummary() }}</td>
                                     <td class="max-w-xs px-3 py-3 text-on-surface-variant">{{ $item->reason }}</td>
                                     <td class="px-3 py-3 text-right whitespace-nowrap">
                                         <button type="button" class="btn-filled state-layer h-8 px-4 text-xs" x-on:click="openReview({{ $item->id }}, @js($item->type), 'approve')">Approve</button>
@@ -113,7 +149,10 @@
                                 </div>
                                 <x-status-pill :status="$item->type" />
                             </div>
-                            <p class="mt-2 text-sm">{{ $item->start_date->equalTo($item->end_date) ? $item->start_date->format('d M Y') : $item->start_date->format('d M Y').' – '.$item->end_date->format('d M Y') }}</p>
+                            <p class="mt-2 text-sm">{{ $item->dateSummary() }}</p>
+                            @if($item->type === 'SCHEDULE_CHANGE')
+                                <p class="mt-1 text-xs text-on-surface-variant">to {{ $item->requestedStatusLabel() }}</p>
+                            @endif
                             <p class="mt-1 text-sm text-on-surface-variant">{{ $item->reason }}</p>
                             <div class="mt-3 flex justify-end gap-1">
                                 <button type="button" class="btn-text state-layer text-error" x-on:click="openReview({{ $item->id }}, @js($item->type), 'reject')">Reject</button>
@@ -152,12 +191,10 @@
                                 <td class="px-3 py-3">
                                     {{ $typeLabels[$item->type] ?? $item->type }}
                                     @if($item->type === 'SCHEDULE_CHANGE')
-                                        <div class="text-xs text-on-surface-variant">to {{ $item->requested_status }}@if($item->credit_dp) · +1 day pending @endif</div>
+                                        <div class="text-xs text-on-surface-variant">to {{ $item->requestedStatusLabel() }}@if($item->credit_dp) · +1 day pending @endif</div>
                                     @endif
                                 </td>
-                                <td class="px-3 py-3 whitespace-nowrap">
-                                    {{ $item->start_date->equalTo($item->end_date) ? $item->start_date->format('d M Y') : $item->start_date->format('d M Y').' – '.$item->end_date->format('d M Y') }}
-                                </td>
+                                <td class="px-3 py-3">{{ $item->dateSummary() }}</td>
                                 <td class="max-w-xs px-3 py-3 text-on-surface-variant">{{ $item->reason }}</td>
                                 <td class="px-3 py-3"><x-status-pill :status="$item->status" /></td>
                                 <td class="max-w-xs px-3 py-3 text-on-surface-variant">{{ $item->manager_note ?: '—' }}</td>
@@ -182,7 +219,10 @@
                             </div>
                             <x-status-pill :status="$item->status" />
                         </div>
-                        <p class="mt-2 text-sm">{{ $item->start_date->equalTo($item->end_date) ? $item->start_date->format('d M Y') : $item->start_date->format('d M Y').' – '.$item->end_date->format('d M Y') }}</p>
+                        <p class="mt-2 text-sm">{{ $item->dateSummary() }}</p>
+                        @if($item->type === 'SCHEDULE_CHANGE')
+                            <p class="mt-1 text-xs text-on-surface-variant">to {{ $item->requestedStatusLabel() }}@if($item->credit_dp) · +1 day pending @endif</p>
+                        @endif
                         <p class="mt-1 text-sm text-on-surface-variant">{{ $item->reason }}</p>
                         @if($item->manager_note)
                             <p class="mt-2 text-sm">{{ $item->manager_note }}</p>
@@ -200,14 +240,14 @@
         </button>
 
         <div x-show="open" x-cloak class="m3-scrim" x-on:click.self="open = false" x-on:keydown.escape.window="open = false">
-            <form method="POST" action="{{ route('requests.store') }}" class="m3-sheet sm:max-w-lg">
+            <form method="POST" action="{{ route('requests.store') }}" class="m3-sheet sm:max-w-lg" x-on:date-picker:change="refreshPreview()">
                 <div class="m3-handle"></div>
                 @csrf
                 <input type="hidden" name="form" value="leave">
                 <h2 class="text-[22px] leading-7">New request</h2>
                 <label class="mt-5 block text-sm">
                     <span class="m3-label">Type</span>
-                    <select name="type" x-model="type" class="m3-field">
+                    <select name="type" x-model="type" x-on:change="refreshPreview()" class="m3-field">
                         <option value="AL">Annual leave (AL)</option>
                         <option value="DP">Day pending (DP)</option>
                         <option value="SL">Sick leave (SL)</option>
@@ -215,18 +255,22 @@
                     </select>
                 </label>
                 <label class="mt-3 block text-sm">
-                    <span class="m3-label" x-text="type === 'SCHEDULE_CHANGE' ? 'Date' : 'Dates'"></span>
+                    <span class="m3-label">Dates</span>
                     <x-date-range-picker
                         mode="range"
                         start-name="start_date"
                         end-name="end_date"
+                        dates-name="selected_dates"
                         start-model="start"
                         end-model="end"
                         :start="old('start_date', '')"
                         :end="old('end_date', '')"
+                        :dates="old('selected_dates', '')"
                         required
-                        x-bind:data-mode="type === 'SCHEDULE_CHANGE' ? 'single' : 'range'"
+                        x-bind:data-allow-multiple="type === 'SCHEDULE_CHANGE' ? '1' : null"
                     />
+                    <p class="mt-2 text-xs text-on-surface-variant" x-show="type === 'SCHEDULE_CHANGE' && preview" x-text="preview"></p>
+                    <p class="mt-1 text-xs text-error" x-show="type === 'SCHEDULE_CHANGE' && previewConflict" x-text="previewConflict"></p>
                 </label>
                 <label class="mt-3 block text-sm" x-show="type === 'SCHEDULE_CHANGE'">
                     <span class="m3-label">Requested status</span>

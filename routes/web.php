@@ -23,6 +23,7 @@ Route::middleware('auth.roster')->group(function () {
     Route::delete('/roster/tasks/{dayTask}', [DayTaskController::class, 'destroy'])->name('roster.tasks.destroy');
 
     Route::get('/requests', [RequestController::class, 'index'])->name('requests.index');
+    Route::get('/requests/preview', [RequestController::class, 'preview'])->name('requests.preview');
     Route::post('/requests', [RequestController::class, 'store'])->name('requests.store');
 
     Route::middleware('manager.only')->group(function () {

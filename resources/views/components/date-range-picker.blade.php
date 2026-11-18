@@ -9,6 +9,8 @@
     'named' => true,
     'startModel' => null,
     'endModel' => null,
+    'datesName' => null,
+    'dates' => '',
 ])
 
 <div
@@ -38,7 +40,14 @@
         @if($named && $endName !== '') name="{{ $endName }}" @endif
         @if($endModel) x-model="{{ $endModel }}" @endif
     >
+    @if($datesName)
+        <input type="hidden" name="{{ $datesName }}" data-picker-dates value="{{ $dates }}">
+    @endif
     <div class="date-picker-popover z-[70]" data-picker-popover role="dialog" aria-label="Choose dates" hidden>
+        <div class="date-picker-modes" data-picker-modes hidden>
+            <button type="button" class="date-picker-mode" data-picker-action="mode-range">Range</button>
+            <button type="button" class="date-picker-mode" data-picker-action="mode-multiple">Multiple dates</button>
+        </div>
         <div class="date-picker-months" data-picker-months></div>
         <div class="date-picker-actions">
             <button type="button" class="btn-text state-layer" data-picker-action="today">Today</button>

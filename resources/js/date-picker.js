@@ -1,4 +1,4 @@
-const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
 function parseISO(value) {
     if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -45,6 +45,47 @@ function inclusiveDays(start, end) {
     return Math.round(ms / 86400000) + 1;
 }
 
+function eachDay(start, end) {
+    const from = parseISO(start);
+    const to = parseISO(end || start);
+
+    if (!from || !to) {
+        return [];
+    }
+
+    const [first, last] = to < from ? [to, from] : [from, to];
+    const dates = [];
+    const cursor = new Date(first.getFullYear(), first.getMonth(), first.getDate());
+
+    while (cursor <= last) {
+        dates.push(formatISO(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return dates;
+}
+
+function isContiguous(dates) {
+    if (dates.length === 0) {
+        return true;
+    }
+
+    return inclusiveDays(dates[0], dates[dates.length - 1]) === dates.length;
+}
+
+function formatList(dates) {
+    const parsed = dates.map(parseISO).filter(Boolean);
+    const sameYear = parsed.every((date) => date.getFullYear() === parsed[0].getFullYear());
+
+    if (sameYear) {
+        const days = parsed.map((date) => date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })).join(', ');
+
+        return `${days} ${parsed[0].getFullYear()}`;
+    }
+
+    return parsed.map((date) => date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })).join(', ');
+}
+
 class DateRangePicker {
     constructor(root) {
         this.root = root;
@@ -56,17 +97,25 @@ class DateRangePicker {
         this.count = root.querySelector('[data-picker-count]');
         this.startInput = root.querySelector('[data-picker-start]');
         this.endInput = root.querySelector('[data-picker-end]');
+        this.datesInput = root.querySelector('[data-picker-dates]');
         this.popover = root.querySelector('[data-picker-popover]');
+        this.modes = this.popover.querySelector('[data-picker-modes]');
         this.months = this.popover.querySelector('[data-picker-months]');
         this.clearButton = this.popover.querySelector('[data-picker-clear]');
         this.view = parseISO(this.startInput.value) || parseISO(this.today) || new Date();
         this.view = new Date(this.view.getFullYear(), this.view.getMonth(), 1);
+        this.selection = 'range';
         this.draftStart = '';
         this.draftEnd = '';
+        this.draftDates = new Set();
+        this.committedDates = [];
         this.hover = '';
         this.open = false;
+        this.backdrop = document.createElement('div');
+        this.backdrop.className = 'date-picker-backdrop';
+        this.backdrop.hidden = true;
 
-        document.body.appendChild(this.popover);
+        document.body.append(this.backdrop, this.popover);
         this.clearButton.hidden = !this.clearable;
         this.popover.addEventListener('click', (event) => this.onPopoverClick(event));
         this.popover.addEventListener('mouseover', (event) => this.onHover(event));
@@ -78,15 +127,39 @@ class DateRangePicker {
         });
         this.trigger.addEventListener('click', () => this.toggle());
         this.read();
+        this.applyMode();
 
         this.observer = new MutationObserver(() => this.applyMode());
-        this.observer.observe(root, { attributes: true, attributeFilter: ['data-mode'] });
+        this.observer.observe(root, { attributes: true, attributeFilter: ['data-mode', 'data-allow-multiple'] });
+    }
+
+    allowsMultiple() {
+        return this.root.hasAttribute('data-allow-multiple') && !['0', 'false'].includes(this.root.dataset.allowMultiple || '');
     }
 
     applyMode() {
         const next = this.root.dataset.mode === 'single' ? 'single' : 'range';
+        const allow = this.allowsMultiple();
+
+        if (!allow && this.selection === 'multiple') {
+            this.selection = 'range';
+            this.draftDates = new Set();
+        }
+
+        if (!allow && this.committedDates.length > 0 && !isContiguous(this.committedDates)) {
+            this.selection = 'range';
+            this.commit('', '');
+        }
+
+        if (this.modes) {
+            this.modes.hidden = !allow;
+        }
 
         if (next === this.mode) {
+            if (this.open) {
+                this.render();
+            }
+
             return;
         }
 
@@ -106,9 +179,26 @@ class DateRangePicker {
     read() {
         const start = this.startInput.value || '';
         const end = this.endInput.value || start;
+        let dates = [];
+
+        if (this.datesInput?.value) {
+            try {
+                const parsed = JSON.parse(this.datesInput.value);
+                dates = Array.isArray(parsed) ? parsed.filter((date) => parseISO(date)).sort() : [];
+            } catch {
+                dates = [];
+            }
+        }
+
+        if (dates.length === 0 && start) {
+            dates = eachDay(start, end || start);
+        }
+
+        this.committedDates = dates;
         this.draftStart = start;
         this.draftEnd = end;
-        this.paintField(start, end);
+        this.draftDates = new Set(dates);
+        this.paintField(dates.length ? dates : (start ? [start] : []));
     }
 
     set(start, end) {
@@ -118,37 +208,55 @@ class DateRangePicker {
     commit(start, end, notify = true) {
         const single = this.mode === 'single';
         const nextEnd = start ? (single ? start : (end || start)) : '';
-        this.startInput.value = start;
-        this.endInput.value = nextEnd;
-        this.draftStart = start;
-        this.draftEnd = nextEnd;
-        this.paintField(start, nextEnd);
-
-        if (notify) {
-            this.startInput.dispatchEvent(new Event('input', { bubbles: true }));
-            this.endInput.dispatchEvent(new Event('input', { bubbles: true }));
-            this.root.dispatchEvent(new CustomEvent('date-picker:change', {
-                bubbles: true,
-                detail: { start, end: nextEnd },
-            }));
-        }
+        const dates = start ? eachDay(start, nextEnd) : [];
+        this.write(start, nextEnd, dates, notify);
     }
 
-    paintField(start, end) {
-        if (!start) {
+    commitDates(dates, notify = true) {
+        const sorted = [...new Set(dates)].filter((date) => parseISO(date)).sort();
+        this.write(sorted[0] || '', sorted[sorted.length - 1] || '', sorted, notify);
+    }
+
+    write(start, end, dates, notify) {
+        this.startInput.value = start;
+        this.endInput.value = end;
+        this.draftStart = start;
+        this.draftEnd = end;
+        this.draftDates = new Set(dates);
+        this.committedDates = dates;
+
+        if (this.datesInput) {
+            this.datesInput.value = dates.length ? JSON.stringify(dates) : '';
+        }
+
+        this.paintField(dates);
+
+        if (!notify) {
+            return;
+        }
+
+        this.startInput.dispatchEvent(new Event('input', { bubbles: true }));
+        this.endInput.dispatchEvent(new Event('input', { bubbles: true }));
+        this.datesInput?.dispatchEvent(new Event('input', { bubbles: true }));
+        this.root.dispatchEvent(new CustomEvent('date-picker:change', {
+            bubbles: true,
+            detail: { start, end, dates },
+        }));
+    }
+
+    paintField(dates) {
+        if (!dates.length) {
             this.label.textContent = this.mode === 'single' ? 'Select date' : 'Select dates';
             this.count.hidden = true;
 
             return;
         }
 
-        const finish = end || start;
-        this.label.textContent = start === finish
-            ? formatLabel(start)
-            : `${formatLabel(start)} → ${formatLabel(finish)}`;
-        const days = inclusiveDays(start, finish);
+        this.label.textContent = isContiguous(dates) && dates[0] !== dates[dates.length - 1]
+            ? `${formatLabel(dates[0])} → ${formatLabel(dates[dates.length - 1])}`
+            : (dates.length === 1 ? formatLabel(dates[0]) : formatList(dates));
         this.count.hidden = false;
-        this.count.textContent = days === 1 ? '1 day' : `${days} days`;
+        this.count.textContent = dates.length === 1 ? '1 day' : `${dates.length} days`;
     }
 
     toggle() {
@@ -161,8 +269,9 @@ class DateRangePicker {
         DateRangePicker.current?.close(false);
         DateRangePicker.current = this;
         this.open = true;
+        this.draftDates = new Set(this.committedDates);
         this.draftStart = this.startInput.value;
-        this.draftEnd = this.endInput.value;
+        this.draftEnd = this.selection === 'multiple' ? '' : this.endInput.value;
         this.hover = '';
         const anchor = parseISO(this.draftStart) || parseISO(this.today);
         this.view = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -172,13 +281,20 @@ class DateRangePicker {
     }
 
     close(apply) {
-        if (apply && this.draftStart) {
+        const count = this.selection === 'multiple'
+            ? this.draftDates.size
+            : inclusiveDays(this.draftStart, this.draftEnd || this.draftStart);
+
+        if (apply && count > 0 && count <= 31 && this.selection === 'multiple') {
+            this.commitDates([...this.draftDates]);
+        } else if (apply && count > 0 && count <= 31 && this.draftStart) {
             this.commit(this.draftStart, this.draftEnd || this.draftStart);
         }
 
         this.open = false;
         this.hover = '';
         this.popover.hidden = true;
+        this.backdrop.hidden = true;
 
         if (DateRangePicker.current === this) {
             DateRangePicker.current = null;
@@ -186,6 +302,18 @@ class DateRangePicker {
     }
 
     position() {
+        const mobile = window.matchMedia('(max-width: 639px)').matches;
+        this.popover.classList.toggle('is-centered', mobile);
+        this.backdrop.hidden = !mobile;
+
+        if (mobile) {
+            this.popover.style.left = '50%';
+            this.popover.style.top = '50%';
+            this.popover.style.transform = 'translate(-50%, -50%)';
+
+            return;
+        }
+
         const rect = this.trigger.getBoundingClientRect();
         const margin = 8;
         const width = this.popover.offsetWidth;
@@ -205,6 +333,7 @@ class DateRangePicker {
             top = Math.max(margin, rect.top - height - margin);
         }
 
+        this.popover.style.transform = '';
         this.popover.style.left = `${left}px`;
         this.popover.style.top = `${top}px`;
     }
@@ -242,8 +371,13 @@ class DateRangePicker {
         }
 
         if (action === 'today') {
-            this.draftStart = this.today;
-            this.draftEnd = this.today;
+            if (this.selection === 'multiple') {
+                this.draftDates = new Set([this.today]);
+            } else {
+                this.draftStart = this.today;
+                this.draftEnd = this.today;
+            }
+
             this.hover = '';
             const today = parseISO(this.today);
             this.view = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -253,13 +387,25 @@ class DateRangePicker {
         }
 
         if (action === 'clear') {
+            this.draftDates = new Set();
             this.commit('', '');
             this.close(false);
 
             return;
         }
 
-        if (action === 'apply' && this.draftStart) {
+        if (action === 'mode-range' || action === 'mode-multiple') {
+            this.selection = action === 'mode-multiple' ? 'multiple' : 'range';
+            this.draftStart = '';
+            this.draftEnd = '';
+            this.draftDates = new Set();
+            this.hover = '';
+            this.render();
+
+            return;
+        }
+
+        if (action === 'apply') {
             this.close(true);
         }
     }
@@ -267,7 +413,7 @@ class DateRangePicker {
     onHover(event) {
         const day = event.target.closest('[data-date]');
 
-        if (!day || this.mode === 'single' || !this.draftStart || this.draftEnd) {
+        if (!day || this.selection === 'multiple' || this.mode === 'single' || !this.draftStart || this.draftEnd) {
             return;
         }
 
@@ -280,6 +426,18 @@ class DateRangePicker {
     }
 
     onDay(iso) {
+        if (this.selection === 'multiple') {
+            if (this.draftDates.has(iso)) {
+                this.draftDates.delete(iso);
+            } else if (this.draftDates.size < 31) {
+                this.draftDates.add(iso);
+            }
+
+            this.render();
+
+            return;
+        }
+
         if (this.mode === 'single') {
             this.draftStart = iso;
             this.draftEnd = iso;
@@ -306,19 +464,22 @@ class DateRangePicker {
     }
 
     render() {
-        const dual = window.matchMedia('(min-width: 640px)').matches;
-        this.popover.classList.toggle('is-dual', dual);
-        const months = dual ? [this.view, addMonths(this.view, 1)] : [this.view];
         this.months.replaceChildren();
-
-        months.forEach((month, index) => {
-            this.months.appendChild(this.monthElement(month, index === 0, index === months.length - 1));
+        this.months.appendChild(this.monthElement(this.view));
+        this.modes?.querySelectorAll('[data-picker-action]').forEach((button) => {
+            const selected = (button.dataset.pickerAction === 'mode-multiple' && this.selection === 'multiple')
+                || (button.dataset.pickerAction === 'mode-range' && this.selection === 'range');
+            button.classList.toggle('is-selected', selected);
+            button.setAttribute('aria-pressed', selected ? 'true' : 'false');
         });
 
         const apply = this.popover.querySelector('[data-picker-action="apply"]');
 
         if (apply) {
-            apply.disabled = !this.draftStart;
+            const count = this.selection === 'multiple'
+                ? this.draftDates.size
+                : inclusiveDays(this.draftStart, this.draftEnd || this.draftStart);
+            apply.disabled = count < 1 || count > 31;
         }
 
         if (this.open) {
@@ -326,15 +487,15 @@ class DateRangePicker {
         }
     }
 
-    monthElement(month, isFirst, isLast) {
+    monthElement(month) {
         const section = document.createElement('section');
         section.className = 'date-picker-month';
         const header = document.createElement('div');
         header.className = 'date-picker-header';
         header.append(
-            this.navButton('prev', 'Previous month', isFirst),
+            this.navButton('prev', 'Previous month'),
             this.monthTitle(month),
-            this.navButton('next', 'Next month', isLast),
+            this.navButton('next', 'Next month'),
         );
 
         const weekdays = document.createElement('div');
@@ -353,7 +514,7 @@ class DateRangePicker {
         return section;
     }
 
-    navButton(action, label, visible) {
+    navButton(action, label) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'date-picker-nav';
@@ -361,24 +522,20 @@ class DateRangePicker {
         button.setAttribute('aria-label', label);
         button.innerHTML = `<span class="material-symbols-rounded text-[20px]">${action === 'prev' ? 'chevron_left' : 'chevron_right'}</span>`;
 
-        if (!visible) {
-            button.hidden = true;
-        }
-
         return button;
     }
 
     monthTitle(month) {
         const title = document.createElement('h3');
         title.className = 'date-picker-title';
-        title.textContent = month.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        title.textContent = month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
         return title;
     }
 
     days(month) {
         const first = new Date(month.getFullYear(), month.getMonth(), 1);
-        const offset = (first.getDay() + 6) % 7;
+        const offset = first.getDay();
         const start = new Date(month.getFullYear(), month.getMonth(), 1 - offset);
         const days = [];
 
@@ -403,6 +560,14 @@ class DateRangePicker {
 
         if (iso === this.today) {
             button.classList.add('is-today');
+        }
+
+        if (this.selection === 'multiple') {
+            if (this.draftDates.has(iso)) {
+                button.classList.add('is-start', 'is-single');
+            }
+
+            return button;
         }
 
         const start = this.draftStart;
@@ -445,6 +610,14 @@ document.addEventListener('pointerdown', (event) => {
     const current = DateRangePicker.current;
 
     if (!current?.open) {
+        return;
+    }
+
+    if (current.backdrop && event.target === current.backdrop) {
+        event.preventDefault();
+        event.stopPropagation();
+        current.close(false);
+
         return;
     }
 

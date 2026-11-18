@@ -180,5 +180,172 @@ class LeaveRequestTest extends TestCase
             'date' => '2026-11-12',
             'status' => 'SL',
         ]);
+        $this->assertNull($leave->refresh()->selected_dates);
+    }
+
+    public function test_a_schedule_change_range_is_saved_and_written_to_each_roster_day(): void
+    {
+        $staff = User::factory()->create(['dp_balance' => 4]);
+        $manager = User::factory()->manager()->create();
+
+        RosterEntry::query()->create(['user_id' => $staff->id, 'date' => '2026-11-20', 'status' => 'OFF']);
+        RosterEntry::query()->create(['user_id' => $staff->id, 'date' => '2026-11-21', 'status' => 'SHIFT', 'note' => '08:00 - 17:00']);
+
+        $this->actingAsRoster($staff)->get(route('requests.preview', [
+            'dates' => ['2026-11-20', '2026-11-21', '2026-11-22'],
+        ]))->assertOk()->assertJson([
+            'summary' => 'Current roster: 20 Nov (OFF), 21 Nov (ON), 22 Nov (Not set)',
+            'conflict' => null,
+        ]);
+
+        $this->actingAsRoster($staff)->post(route('requests.store'), [
+            'type' => 'SCHEDULE_CHANGE',
+            'start_date' => '2026-11-20',
+            'end_date' => '2026-11-22',
+            'selected_dates' => json_encode(['2026-11-20', '2026-11-21', '2026-11-22']),
+            'requested_status' => 'SHIFT',
+            'reason' => 'Cover the long weekend',
+        ])->assertSessionHas('status');
+
+        $leave = LeaveRequest::query()->first();
+
+        $this->assertSame(['2026-11-20', '2026-11-21', '2026-11-22'], $leave->selected_dates);
+        $this->assertSame('2026-11-20', $leave->start_date->toDateString());
+        $this->assertSame('2026-11-22', $leave->end_date->toDateString());
+        $this->assertSame('20 Nov – 22 Nov 2026 (3d)', $leave->dateSummary());
+
+        $this->actingAsRoster($manager)
+            ->get(route('requests.index'))
+            ->assertSee('20 Nov – 22 Nov 2026 (3d)', false)
+            ->assertSee('to ON', false);
+
+        $this->actingAsRoster($manager)
+            ->post(route('requests.approve', $leave))
+            ->assertSessionHas('status');
+
+        $this->assertSame(4, $staff->refresh()->dp_balance);
+        $this->assertFalse($leave->refresh()->credit_dp);
+
+        foreach (['2026-11-20', '2026-11-21', '2026-11-22'] as $date) {
+            $this->assertDatabaseHas('roster_entries', [
+                'user_id' => $staff->id,
+                'date' => $date,
+                'status' => 'SHIFT',
+                'note' => '08:00 - 17:00',
+            ]);
+        }
+    }
+
+    public function test_separate_schedule_dates_do_not_change_the_days_between_them(): void
+    {
+        $staff = User::factory()->create(['dp_balance' => 0]);
+        $manager = User::factory()->manager()->create();
+
+        RosterEntry::query()->create(['user_id' => $staff->id, 'date' => '2026-11-21', 'status' => 'AL']);
+
+        $this->actingAsRoster($staff)->post(route('requests.store'), [
+            'type' => 'SCHEDULE_CHANGE',
+            'start_date' => '2026-11-20',
+            'end_date' => '2026-11-25',
+            'selected_dates' => json_encode(['2026-11-25', '2026-11-20']),
+            'requested_status' => 'OFF',
+            'reason' => 'Two separate days off',
+        ])->assertSessionHas('status');
+
+        $leave = LeaveRequest::query()->first();
+
+        $this->assertSame(['2026-11-20', '2026-11-25'], $leave->selected_dates);
+        $this->assertSame('20 Nov, 25 Nov 2026 (2d)', $leave->dateSummary());
+        $this->assertSame('OFF', $leave->requestedStatusLabel());
+
+        $this->actingAsRoster($manager)->post(route('requests.approve', $leave), [
+            'credit_dp' => '1',
+        ])->assertSessionHas('status');
+
+        $this->assertSame(1, $staff->refresh()->dp_balance);
+        $this->assertTrue($leave->refresh()->credit_dp);
+        $this->assertDatabaseHas('roster_entries', [
+            'user_id' => $staff->id,
+            'date' => '2026-11-20',
+            'status' => 'OFF',
+            'note' => null,
+        ]);
+        $this->assertDatabaseHas('roster_entries', [
+            'user_id' => $staff->id,
+            'date' => '2026-11-25',
+            'status' => 'OFF',
+            'note' => null,
+        ]);
+        $this->assertDatabaseHas('roster_entries', [
+            'user_id' => $staff->id,
+            'date' => '2026-11-21',
+            'status' => 'AL',
+        ]);
+        $this->assertDatabaseMissing('roster_entries', [
+            'user_id' => $staff->id,
+            'date' => '2026-11-22',
+        ]);
+    }
+
+    public function test_schedule_dates_conflict_with_pending_or_approved_requests_only(): void
+    {
+        $staff = User::factory()->create();
+        $other = User::factory()->create();
+
+        LeaveRequest::query()->create([
+            'user_id' => $other->id,
+            'type' => 'AL',
+            'start_date' => '2026-11-20',
+            'end_date' => '2026-11-20',
+            'reason' => 'Someone else',
+            'status' => 'APPROVED',
+        ]);
+        $pending = LeaveRequest::query()->create([
+            'user_id' => $staff->id,
+            'type' => 'AL',
+            'start_date' => '2026-11-20',
+            'end_date' => '2026-11-21',
+            'reason' => 'Waiting',
+            'status' => 'PENDING',
+        ]);
+
+        $payload = [
+            'type' => 'SCHEDULE_CHANGE',
+            'start_date' => '2026-11-20',
+            'end_date' => '2026-11-25',
+            'selected_dates' => json_encode(['2026-11-20', '2026-11-25']),
+            'requested_status' => 'SHIFT',
+            'reason' => 'Swap those days',
+        ];
+
+        $this->actingAsRoster($staff)
+            ->post(route('requests.store'), $payload)
+            ->assertSessionHasErrors('selected_dates');
+
+        $pending->update(['status' => 'REJECTED']);
+
+        LeaveRequest::query()->create([
+            'user_id' => $staff->id,
+            'type' => 'SL',
+            'start_date' => '2026-11-25',
+            'end_date' => '2026-11-25',
+            'reason' => 'Already approved',
+            'status' => 'APPROVED',
+        ]);
+
+        $this->actingAsRoster($staff)
+            ->post(route('requests.store'), $payload)
+            ->assertSessionHasErrors('selected_dates');
+
+        $this->assertSame(3, LeaveRequest::query()->count());
+
+        LeaveRequest::query()->where('status', 'APPROVED')->where('user_id', $staff->id)->update(['status' => 'REJECTED']);
+
+        $this->actingAsRoster($staff)
+            ->post(route('requests.store'), $payload)
+            ->assertSessionHas('status');
+
+        $created = LeaveRequest::query()->where('type', 'SCHEDULE_CHANGE')->first();
+        $this->assertSame(['2026-11-20', '2026-11-25'], $created->selected_dates);
     }
 }
