@@ -356,6 +356,168 @@
         background: color-mix(in srgb, var(--md-on-surface-variant) 40%, transparent);
     }
 
+    .date-picker-field {
+        display: flex;
+        width: 100%;
+        height: 3.5rem;
+        align-items: center;
+        gap: 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--md-outline);
+        background: transparent;
+        padding: 0 0.75rem 0 1rem;
+        color: var(--md-on-surface);
+        text-align: left;
+    }
+
+    .date-picker-field:focus-visible {
+        border-color: var(--md-primary);
+        border-width: 2px;
+        outline: none;
+    }
+
+    .date-picker-icon {
+        font-size: 20px;
+        color: var(--md-on-surface-variant);
+    }
+
+    .date-picker-value {
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 0.875rem;
+    }
+
+    .date-picker-count {
+        flex: none;
+        border-radius: 999px;
+        background: var(--md-secondary-container);
+        padding: 0.125rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--md-on-secondary-container);
+    }
+
+    .date-picker-popover {
+        position: fixed;
+        z-index: 70;
+        width: min(100vw - 1rem, 20rem);
+        max-height: min(32rem, calc(100vh - 1rem));
+        overflow: auto;
+        border-radius: 1.75rem;
+        border: 1px solid var(--md-outline-variant);
+        background: var(--md-surface-container-high);
+        padding: 0.75rem;
+        box-shadow: 0 8px 24px rgb(15 23 42 / 0.18);
+    }
+
+    .date-picker-popover.is-dual {
+        width: min(100vw - 1rem, 40rem);
+    }
+
+    .date-picker-months {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    @media (min-width: 640px) {
+        .date-picker-popover.is-dual .date-picker-months {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+
+    .date-picker-header,
+    .date-picker-weekdays,
+    .date-picker-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        align-items: center;
+    }
+
+    .date-picker-header {
+        grid-template-columns: 2.25rem 1fr 2.25rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .date-picker-title {
+        text-align: center;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .date-picker-nav {
+        display: grid;
+        width: 2.25rem;
+        height: 2.25rem;
+        place-items: center;
+        border-radius: 999px;
+        color: var(--md-on-surface-variant);
+    }
+
+    .date-picker-nav:hover {
+        background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+    }
+
+    .date-picker-weekdays {
+        margin-bottom: 0.25rem;
+        color: var(--md-on-surface-variant);
+        font-size: 0.75rem;
+        text-align: center;
+    }
+
+    .date-picker-day {
+        height: 2.25rem;
+        border-radius: 999px;
+        font-size: 0.8125rem;
+        color: var(--md-on-surface);
+    }
+
+    .date-picker-day.is-outside {
+        color: var(--md-outline);
+    }
+
+    .date-picker-day.is-today {
+        box-shadow: inset 0 0 0 1px var(--md-primary);
+    }
+
+    .date-picker-day.is-range,
+    .date-picker-day.is-hover {
+        border-radius: 0;
+        background: color-mix(in srgb, var(--md-primary) 18%, transparent);
+    }
+
+    .date-picker-day.is-start,
+    .date-picker-day.is-end {
+        border-radius: 999px;
+        background: var(--md-primary);
+        color: var(--md-on-primary);
+        font-weight: 600;
+    }
+
+    .date-picker-day:hover {
+        background: color-mix(in srgb, var(--md-primary) 28%, transparent);
+    }
+
+    .date-picker-day.is-start:hover,
+    .date-picker-day.is-end:hover {
+        background: var(--md-primary);
+    }
+
+    .date-picker-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.25rem;
+        margin-top: 0.5rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--md-outline-variant);
+    }
+
+    .date-picker-actions .btn-filled:disabled {
+        opacity: 0.5;
+    }
+
     @media (min-width: 640px) {
         .m3-handle {
             display: none;

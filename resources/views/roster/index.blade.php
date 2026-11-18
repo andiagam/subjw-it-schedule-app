@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $start->format('F Y'))
+@section('title', 'Roster')
 
 @section('content')
     @php
@@ -310,8 +310,13 @@
                                                             data-task-title
                                                             data-kind="task"
                                                             data-done="{{ $groupedTask->is_done ? '1' : '0' }}"
+                                                            data-completion-note="{{ $groupedTask->completion_note }}"
+                                                            data-created-by="{{ $groupedTask->created_by_name }}"
+                                                            data-updated-by="{{ $groupedTask->updated_by_name }}"
+                                                            data-completed-by="{{ $groupedTask->completed_by_name }}"
+                                                            @if(filled($groupedTask->completion_note)) title="{{ $groupedTask->completion_note }}" @endif
                                                             class="line-clamp-2 w-full break-normal text-left font-medium {{ $groupedTask->is_done ? 'line-through opacity-60' : '' }}"
-                                                            x-on:click="openEdit(@js(['id' => $groupedTask->id, 'date' => $groupedTask->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $groupedTask->title, 'kind' => $groupedTask->kind, 'done' => (bool) $groupedTask->is_done]))"
+                                                            x-on:click="openEdit(@js(['id' => $groupedTask->id, 'date' => $groupedTask->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $groupedTask->title, 'kind' => $groupedTask->kind, 'done' => (bool) $groupedTask->is_done, 'completionNote' => $groupedTask->completion_note]))"
                                                         >{{ $groupedTask->title }}</button>
                                                     </li>
                                                 @endforeach
@@ -324,8 +329,13 @@
                                         data-task-id="{{ $task->id }}"
                                         data-kind="{{ $task->kind }}"
                                         data-done="{{ $task->is_done ? '1' : '0' }}"
+                                        data-completion-note="{{ $task->completion_note }}"
+                                        data-created-by="{{ $task->created_by_name }}"
+                                        data-updated-by="{{ $task->updated_by_name }}"
+                                        data-completed-by="{{ $task->completed_by_name }}"
+                                        @if($task->kind === 'task' && $task->is_done && filled($task->completion_note)) title="{{ $task->completion_note }}" @endif
                                         class="w-full rounded-lg px-2 py-1.5 text-left text-xs leading-snug {{ $chipFor($task->kind) }} {{ $task->is_done ? 'line-through opacity-60' : '' }}"
-                                        x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
+                                        x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $day->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done, 'completionNote' => $task->completion_note]))"
                                     >
                                         <span class="block text-[10px] font-medium tracking-wide">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
                                         <span class="line-clamp-2 block break-normal font-medium" data-task-title>{{ $task->title }}</span>
@@ -359,9 +369,13 @@
                             $byline = collect([
                                 $task->created_by_name ? 'Added by '.$task->created_by_name : null,
                                 $task->updated_by_name ? 'Edited by '.$task->updated_by_name : null,
+                                $task->completed_by_name ? 'Completed by '.$task->completed_by_name : null,
                             ])->filter()->implode(' · ');
+                            if (filled($task->completion_note)) {
+                                $byline = ($byline !== '' ? $byline.' — ' : '').'"'.$task->completion_note.'"';
+                            }
                         @endphp
-                        <li data-today-task="{{ $task->id }}" data-date="{{ $task->date->toDateString() }}" data-created-by="{{ $task->created_by_name }}" data-updated-by="{{ $task->updated_by_name }}" class="flex items-start gap-2 rounded-xl px-1 py-1">
+                        <li data-today-task="{{ $task->id }}" data-date="{{ $task->date->toDateString() }}" data-created-by="{{ $task->created_by_name }}" data-updated-by="{{ $task->updated_by_name }}" data-completed-by="{{ $task->completed_by_name }}" data-completion-note="{{ $task->completion_note }}" class="flex items-start gap-2 rounded-xl px-1 py-1">
                             <input type="checkbox" class="m3-check mt-1" @checked($task->is_done) aria-label="Mark {{ $task->title }} complete" x-on:change="toggleTodayTask($event.target)">
                             <div class="min-w-0 flex-1">
                                 <button
@@ -369,11 +383,11 @@
                                     data-task-id="{{ $task->id }}"
                                     data-task-title
                                     class="w-full text-left text-sm font-medium break-words {{ $task->is_done ? 'line-through opacity-60' : '' }}"
-                                    x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $today->format('l, j F Y'), 'title' => $task->title, 'kind' => 'task', 'done' => (bool) $task->is_done]))"
+                                    x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $today->format('l, j F Y'), 'title' => $task->title, 'kind' => 'task', 'done' => (bool) $task->is_done, 'completionNote' => $task->completion_note]))"
                                 >{{ $task->title }}</button>
                                 <p data-task-byline class="text-xs text-on-surface-variant" @if($byline === '') hidden @endif>{{ $byline }}</p>
                             </div>
-                            <button type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-on-surface-variant hover:bg-surface-high" aria-label="Edit {{ $task->title }}" x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $today->format('l, j F Y'), 'title' => $task->title, 'kind' => 'task', 'done' => (bool) $task->is_done]))">
+                            <button type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-on-surface-variant hover:bg-surface-high" aria-label="Edit {{ $task->title }}" x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $today->format('l, j F Y'), 'title' => $task->title, 'kind' => 'task', 'done' => (bool) $task->is_done, 'completionNote' => $task->completion_note]))">
                                 <x-icon name="edit" class="text-[18px]" />
                             </button>
                             <button type="button" class="grid size-8 shrink-0 place-items-center rounded-full text-error hover:bg-error-container" aria-label="Remove {{ $task->title }}" x-on:click="removeTodayTask(@js($task->id))">
@@ -436,7 +450,7 @@
                                 data-done="{{ $task->is_done ? '1' : '0' }}"
                                 data-date="{{ $task->date->toDateString() }}"
                                 class="row-hover w-full rounded-2xl px-2 py-2 text-left text-sm {{ $task->is_done ? 'line-through opacity-60' : '' }}"
-                                x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $task->date->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done]))"
+                                x-on:click="openEdit(@js(['id' => $task->id, 'date' => $task->date->toDateString(), 'label' => $task->date->format('l, j F Y'), 'title' => $task->title, 'kind' => $task->kind, 'done' => (bool) $task->is_done, 'completionNote' => $task->completion_note]))"
                             >
                                 <span class="font-medium" data-upcoming-date>{{ $task->date->format('j M Y') }}</span>
                                 <span data-upcoming-kind class="ml-2 m3-chip border-0 {{ $chipFor($task->kind) }}">{{ $taskLabels[$task->kind] ?? 'Task' }}</span>
@@ -474,8 +488,17 @@
                     </template>
                     <input type="hidden" name="form" value="task">
                     <input type="hidden" name="date" x-bind:value="taskDate">
+                    <input type="hidden" name="end_date" x-bind:value="taskEnd || taskDate">
                     <h2 class="text-[22px] leading-7" x-text="taskEditing ? 'Edit item' : 'Add to this day'"></h2>
-                    <p class="mt-1 text-sm text-on-surface-variant" x-text="taskDateLabel"></p>
+                    <label class="mt-4 block text-sm">
+                        <span class="m3-label">Dates</span>
+                        <x-date-range-picker
+                            data-task-picker
+                            mode="range"
+                            :named="false"
+                            x-on:date-picker:change="setTaskRange($event.detail.start, $event.detail.end)"
+                        />
+                    </label>
                     <div class="mt-5 flex gap-2">
                         <label class="cursor-pointer">
                             <input type="radio" name="kind" value="event" class="sr-only" x-model="taskKind">
@@ -485,20 +508,22 @@
                             <input type="radio" name="kind" value="task" class="sr-only" x-model="taskKind">
                             <span class="m3-chip state-layer" :class="taskKind === 'task' && 'm3-chip-selected'">Task</span>
                         </label>
-                        <label class="cursor-pointer">
-                            <input type="radio" name="kind" value="holiday" class="sr-only" x-model="taskKind">
-                            <span class="m3-chip state-layer" :class="taskKind === 'holiday' && 'm3-chip-selected'">Holiday</span>
-                        </label>
                     </div>
                     <label class="relative mt-4 block text-sm">
                         <input type="text" name="title" x-model="taskTitle" required maxlength="120" placeholder=" " class="peer m3-field">
                         <span class="m3-float">Title</span>
                     </label>
                     <template x-if="taskEditing && taskKind === 'task'">
-                        <label class="mt-4 flex min-h-11 items-center gap-3 text-sm">
-                            <input type="checkbox" name="is_done" value="1" class="m3-check" x-model="taskDone" x-on:change="markTaskDone()">
-                            <span>Mark as complete</span>
-                        </label>
+                        <div>
+                            <label class="mt-4 flex min-h-11 items-center gap-3 text-sm">
+                                <input type="checkbox" name="is_done" value="1" class="m3-check" x-model="taskDone" x-on:change="onTaskDoneChange()">
+                                <span>Mark as complete</span>
+                            </label>
+                            <label class="mt-3 block text-sm" x-show="taskDone" x-cloak>
+                                <span class="mb-1 block text-xs font-medium text-on-surface-variant">Completion Note</span>
+                                <textarea name="completion_note" x-model="taskCompletionNote" maxlength="500" rows="3" placeholder="Catatan / alasan penyelesaian task..." class="m3-field min-h-24"></textarea>
+                            </label>
+                        </div>
                     </template>
                     <div class="mt-6 flex justify-end gap-2">
                         <button type="button" class="btn-text state-layer" x-on:click="taskOpen = false">Cancel</button>
@@ -507,6 +532,23 @@
                 </form>
                 <div x-show="taskEditing" x-cloak class="mt-2">
                     <button type="button" class="btn-text state-layer w-full text-error" x-on:click="deleteTask">Delete</button>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="completeOpen" x-cloak class="m3-scrim" x-on:click.self="cancelComplete()" x-on:keydown.escape.window="if (completeOpen) cancelComplete()">
+            <div class="m3-sheet sm:max-w-sm" role="dialog" aria-modal="true" aria-labelledby="complete-task-title">
+                <div class="m3-handle"></div>
+                <h2 id="complete-task-title" class="text-[22px] leading-7">Complete Task</h2>
+                <p class="mt-1 text-sm text-on-surface-variant" x-text="completeTitle"></p>
+                <label class="mt-4 block text-sm">
+                    <span class="mb-1 block text-xs font-medium text-on-surface-variant">Completion Note</span>
+                    <textarea x-model="completeNote" maxlength="500" rows="3" placeholder="Catatan / alasan penyelesaian task..." class="m3-field min-h-24"></textarea>
+                </label>
+                <div class="mt-6 flex flex-wrap justify-end gap-2">
+                    <button type="button" class="btn-text state-layer" x-on:click="cancelComplete()">Cancel</button>
+                    <button type="button" class="btn-text state-layer" x-show="!(completeNote || '').trim()" x-on:click="confirmComplete(true)">Skip &amp; Complete</button>
+                    <button type="button" class="btn-filled state-layer" x-on:click="confirmComplete(false)">Complete</button>
                 </div>
             </div>
         </div>
@@ -521,6 +563,9 @@
                             <span class="font-medium">{{ $activityLabels[$log->action] ?? ucfirst($log->action) }}</span>
                             <span class="text-on-surface-variant"> · {{ $log->task_title }}</span>
                             <span class="mt-0.5 block text-xs text-on-surface-variant">{{ $log->actor_name }} · {{ $log->created_at?->timezone(config('app.timezone'))->format('j M Y, H:i') }}</span>
+                            @if(filled($log->note))
+                                <span class="mt-1 block">"{{ $log->note }}"</span>
+                            @endif
                         </li>
                     @empty
                         <li data-activity-empty class="text-sm text-on-surface-variant">No activity yet.</li>

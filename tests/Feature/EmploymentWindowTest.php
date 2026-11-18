@@ -249,11 +249,13 @@ class EmploymentWindowTest extends TestCase
         $black = User::factory()->create(['name' => 'Black Shift']);
         RosterEntry::query()->create(['user_id' => $black->id, 'date' => '2026-12-25', 'status' => 'BLACK']);
 
-        $this->actingAsRoster($manager)->post(route('roster.tasks.store'), [
+        DayTask::query()->create([
             'date' => '2026-12-25',
             'title' => 'Christmas',
             'kind' => 'holiday',
-        ])->assertRedirect();
+            'user_id' => $manager->id,
+        ]);
+        app(\App\Services\RosterService::class)->applyPublicHoliday('2026-12-25');
 
         $this->assertSame('PH', RosterEntry::query()->where('user_id', $active->id)->whereDate('date', '2026-12-25')->value('status'));
         $this->assertDatabaseMissing('roster_entries', ['user_id' => $notStarted->id, 'date' => '2026-12-25']);

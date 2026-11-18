@@ -1,4 +1,5 @@
 import Alpine from 'alpinejs';
+import { initDatePickers } from './date-picker';
 
 window.Alpine = Alpine;
 
@@ -35,8 +36,17 @@ document.addEventListener('alpine:init', () => {
         taskOpen: Boolean(initial.taskOpen),
         taskEditing: false,
         taskDone: false,
+        taskSavedDone: false,
+        taskCompletionNote: '',
+        completeOpen: false,
+        completeNote: '',
+        completeId: '',
+        completeDate: '',
+        completeTitle: '',
+        completeSource: '',
         taskAction: '/roster/tasks',
         taskDate: initial.taskDate || '',
+        taskEnd: initial.taskDate || '',
         taskDateLabel: initial.taskDateLabel || '',
         taskKind: initial.taskKind || 'task',
         taskTitle: initial.taskTitle || '',
@@ -239,12 +249,30 @@ document.addEventListener('alpine:init', () => {
         openTask(date, label) {
             this.taskEditing = false;
             this.taskDone = false;
+            this.taskSavedDone = false;
+            this.taskCompletionNote = '';
             this.taskAction = '/roster/tasks';
             this.taskDate = date;
+            this.taskEnd = date;
             this.taskDateLabel = label;
             this.taskKind = 'task';
             this.taskTitle = '';
             this.taskOpen = true;
+            this.syncTaskPicker();
+        },
+        setTaskRange(start, end) {
+            if (!start) {
+                return;
+            }
+
+            this.taskDate = start;
+            this.taskEnd = end || start;
+            this.taskDateLabel = this.formatLongDay(start);
+        },
+        syncTaskPicker() {
+            this.$nextTick(() => {
+                this.$root.querySelector('[data-task-picker]')?._picker?.set(this.taskDate, this.taskEnd || this.taskDate);
+            });
         },
         openEvent(date, label) {
             this.openTask(date, label);
@@ -253,10 +281,14 @@ document.addEventListener('alpine:init', () => {
         openEdit(task) {
             this.taskEditing = true;
             this.taskDone = Boolean(task.done);
+            this.taskSavedDone = Boolean(task.done);
+            this.taskCompletionNote = task.completionNote || '';
             this.taskAction = `/roster/tasks/${task.id}`;
             this.taskDate = task.date;
+            this.taskEnd = task.date;
             this.taskDateLabel = task.label;
-            this.taskKind = task.kind;
+            this.taskKind = task.kind === 'holiday' ? 'event' : task.kind;
+            this.syncTaskPicker();
             this.taskTitle = task.title;
             this.taskOpen = true;
         },
@@ -337,9 +369,11 @@ document.addEventListener('alpine:init', () => {
             const snapshot = editing ? this.snapshotTask(id) : null;
             const payload = {
                 date: this.taskDate,
+                end_date: this.taskEnd || this.taskDate,
                 title: this.taskTitle.trim(),
                 kind: this.taskKind,
                 is_done: this.taskKind === 'task' && this.taskDone,
+                completion_note: this.taskKind === 'task' && this.taskDone ? (this.taskCompletionNote.trim() || null) : null,
             };
 
             if (editing) {
@@ -384,18 +418,25 @@ document.addEventListener('alpine:init', () => {
                 this.undo = [];
                 this.noteActivity(data.activity);
 
+                const saved = Array.isArray(data.tasks) && data.tasks.length ? data.tasks : (data.task ? [data.task] : []);
+
+                saved.forEach((task, index) => {
+                    if (!editing && index === 0) {
+                        return;
+                    }
+
+                    this.placeTodayItem(task.id, task);
+                    this.paintCalendarKind(task.id, task);
+                    this.syncUpcoming(task);
+                    this.paintDayMarks(task.date);
+                });
+
                 if (data.task) {
                     this.placeTodayItem(data.task.id, data.task);
                     this.paintCalendarKind(data.task.id, data.task);
-                }
-
-                this.applyByline(editing ? id : data.task?.id, data.task);
-
-                if (data.task?.kind === 'holiday') {
-                    this.paintHoliday(data.task.date);
-                }
-
-                if (data.task) {
+                    this.taskSavedDone = Boolean(data.task.is_done);
+                    this.taskCompletionNote = data.task.completion_note || '';
+                    this.applyByline(editing ? id : data.task.id, data.task);
                     this.syncUpcoming(data.task);
                     this.paintDayMarks(data.task.date);
                     this.refreshDaySheet();
@@ -415,7 +456,19 @@ document.addEventListener('alpine:init', () => {
                 this.releaseSave();
             }
         },
-        async markTaskDone() {
+        onTaskDoneChange() {
+            if (this.taskDone) {
+                return;
+            }
+
+            const previous = this.taskCompletionNote;
+            this.taskCompletionNote = '';
+
+            if (this.taskSavedDone) {
+                this.markTaskDone(previous);
+            }
+        },
+        async markTaskDone(previousNote = '') {
             if (!this.taskEditing || !this.claimSave()) {
                 return;
             }
@@ -426,7 +479,8 @@ document.addEventListener('alpine:init', () => {
                 date: this.taskDate,
                 title: this.taskTitle.trim() || snapshot[0]?.title || '',
                 kind: this.taskKind,
-                is_done: this.taskKind === 'task' && this.taskDone,
+                is_done: false,
+                completion_note: null,
             };
             this.paintTask(id, payload);
 
@@ -446,13 +500,17 @@ document.addEventListener('alpine:init', () => {
                     throw new Error(this.errorText(data) || 'That task could not be updated.');
                 }
 
+                this.taskSavedDone = false;
                 this.noteActivity(data.activity);
                 this.applyByline(id, data.task);
+                this.paintDayMarks(payload.date);
+                this.refreshDaySheet();
             } catch (error) {
                 this.restoreTask(snapshot);
-                this.taskDone = !this.taskDone;
+                this.taskDone = true;
+                this.taskCompletionNote = previousNote;
                 document.querySelectorAll(`[data-today-task="${CSS.escape(String(id))}"] input[type="checkbox"]`).forEach((box) => {
-                    box.checked = this.taskDone;
+                    box.checked = true;
                 });
                 this.toast(error.message || 'That task could not be updated.', 'error');
             } finally {
@@ -642,13 +700,16 @@ document.addEventListener('alpine:init', () => {
                 delete button.dataset.pendingTask;
                 button.addEventListener('click', (event) => {
                     event.stopPropagation();
+                    const row = button.closest('[data-today-task], [data-today-event]');
+                    const titleNode = button.matches('[data-task-title]') ? button : button.querySelector('[data-task-title]');
                     this.openEdit({
                         id: task.id,
-                        date: task.date,
-                        label: this.taskDateLabel,
-                        title: task.title,
-                        kind: task.kind,
-                        done: Boolean(task.is_done),
+                        date: row?.dataset.date || task.date,
+                        label: this.todayLabel || this.taskDateLabel,
+                        title: titleNode?.textContent || task.title,
+                        kind: button.dataset.kind || task.kind,
+                        done: row?.querySelector('input[type="checkbox"]')?.checked || button.dataset.done === '1',
+                        completionNote: button.dataset.completionNote || row?.dataset.completionNote || '',
                     });
                 });
             });
@@ -690,6 +751,8 @@ document.addEventListener('alpine:init', () => {
             row.dataset.date = task.date;
             row.dataset.createdBy = task.created_by_name || (pending ? this.actorName : '');
             row.dataset.updatedBy = task.updated_by_name || '';
+            row.dataset.completedBy = task.completed_by_name || '';
+            row.dataset.completionNote = task.completion_note || '';
             row.className = 'flex items-start gap-2 rounded-xl px-1 py-1';
 
             const checkbox = document.createElement('input');
@@ -707,6 +770,23 @@ document.addEventListener('alpine:init', () => {
             title.dataset.taskTitle = '';
             title.className = `w-full text-left text-sm font-medium break-words${task.is_done ? ' line-through opacity-60' : ''}`;
             title.textContent = task.title;
+            title.addEventListener('click', (event) => {
+                event.stopPropagation();
+
+                if (row.dataset.todayTask === 'pending') {
+                    return;
+                }
+
+                this.openEdit({
+                    id: row.dataset.todayTask,
+                    date: row.dataset.date,
+                    label: this.todayLabel || this.taskDateLabel,
+                    title: title.textContent,
+                    kind: 'task',
+                    done: checkbox.checked,
+                    completionNote: row.dataset.completionNote || '',
+                });
+            });
 
             if (pending) {
                 title.dataset.pendingTask = '1';
@@ -736,6 +816,7 @@ document.addEventListener('alpine:init', () => {
                     title: title.textContent,
                     kind: 'task',
                     done: checkbox.checked,
+                    completionNote: row.dataset.completionNote || '',
                 });
             });
 
@@ -842,27 +923,81 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            if (!this.claimSave()) {
-                input.checked = !input.checked;
+            const id = row.dataset.todayTask;
+            const title = row.querySelector('[data-task-title]')?.textContent?.trim() || '';
+
+            if (input.checked) {
+                if (this.saving || this.completeOpen) {
+                    input.checked = false;
+
+                    return;
+                }
+
+                this.completeId = id;
+                this.completeDate = row.dataset.date;
+                this.completeTitle = title;
+                this.completeNote = '';
+                this.completeSource = 'today';
+                this.completeOpen = true;
 
                 return;
             }
 
-            const id = row.dataset.todayTask;
-            const title = row.querySelector('[data-task-title]')?.textContent?.trim() || '';
-            const done = input.checked;
+            await this.persistCompletion({
+                id,
+                date: row.dataset.date,
+                title,
+                done: false,
+                note: '',
+                revertCheck: true,
+            });
+        },
+        cancelComplete() {
+            if (this.completeSource === 'today' && this.completeId) {
+                document.querySelectorAll(`[data-today-task="${CSS.escape(String(this.completeId))}"] input[type="checkbox"]`).forEach((box) => {
+                    box.checked = false;
+                });
+            }
+
+            this.completeOpen = false;
+        },
+        confirmComplete(skip) {
+            const note = skip ? '' : (this.completeNote || '').trim();
+            const payload = {
+                id: this.completeId,
+                date: this.completeDate,
+                title: this.completeTitle,
+                done: true,
+                note,
+                revertCheck: this.completeSource === 'today',
+            };
+            this.completeOpen = false;
+            this.persistCompletion(payload);
+        },
+        async persistCompletion({ id, date, title, done, note, revertCheck }) {
+            if (!this.claimSave()) {
+                if (revertCheck) {
+                    document.querySelectorAll(`[data-today-task="${CSS.escape(String(id))}"] input[type="checkbox"]`).forEach((box) => {
+                        box.checked = !done;
+                    });
+                }
+
+                return;
+            }
+
             const snapshot = this.snapshotTask(id);
-            this.paintTask(id, { title, kind: 'task', is_done: done });
+            this.paintTask(id, { title, kind: 'task', is_done: done, date, completion_note: done ? note : '' });
 
             try {
                 const response = await fetch(`/roster/tasks/${id}`, {
                     method: 'PUT',
                     headers: this.jsonHeaders(),
                     body: JSON.stringify({
-                        date: row.dataset.date,
+                        date,
                         title,
                         kind: 'task',
                         is_done: done,
+                        completion_note: done ? (note || null) : null,
                     }),
                 });
                 const data = await this.readJson(response);
@@ -877,12 +1012,19 @@ document.addEventListener('alpine:init', () => {
 
                 this.noteActivity(data.activity);
                 this.applyByline(id, data.task);
-                this.paintDayMarks(row.dataset.date);
+                this.paintDayMarks(date);
                 this.refreshDaySheet();
+                this.syncUpcoming(data.task || { id, date, title, kind: 'task', is_done: done });
             } catch (error) {
                 this.restoreTask(snapshot);
-                input.checked = !done;
-                this.paintDayMarks(row.dataset.date);
+
+                if (revertCheck) {
+                    document.querySelectorAll(`[data-today-task="${CSS.escape(String(id))}"] input[type="checkbox"]`).forEach((box) => {
+                        box.checked = !done;
+                    });
+                }
+
+                this.paintDayMarks(date);
                 this.refreshDaySheet();
                 this.toast(error.message || 'That task could not be updated.', 'error');
             } finally {
@@ -1000,6 +1142,14 @@ document.addEventListener('alpine:init', () => {
                 meta.className = 'mt-0.5 block text-xs text-on-surface-variant';
                 meta.textContent = `${entry.actor_name} · ${entry.when}`;
                 item.append(action, title, meta);
+
+                if (entry.note) {
+                    const note = document.createElement('span');
+                    note.className = 'mt-1 block';
+                    note.textContent = `"${entry.note}"`;
+                    item.appendChild(note);
+                }
+
                 list.prepend(item);
             });
         },
@@ -1023,8 +1173,21 @@ document.addEventListener('alpine:init', () => {
                 row.dataset.updatedBy = task.updated_by_name;
             }
 
+            if (task.completed_by_name) {
+                row.dataset.completedBy = task.completed_by_name;
+            } else {
+                delete row.dataset.completedBy;
+            }
+
+            if (task.completion_note) {
+                row.dataset.completionNote = task.completion_note;
+            } else {
+                delete row.dataset.completionNote;
+            }
+
             byline.textContent = this.bylineText(task, false);
             byline.hidden = byline.textContent === '';
+            this.paintCompletion(id, task);
         },
         bylineText(task, pending) {
             const parts = [];
@@ -1038,7 +1201,52 @@ document.addEventListener('alpine:init', () => {
                 parts.push(`Edited by ${task.updated_by_name}`);
             }
 
-            return parts.join(' · ');
+            if (task.completed_by_name) {
+                parts.push(`Completed by ${task.completed_by_name}`);
+            }
+
+            let text = parts.join(' · ');
+
+            if (task.completion_note) {
+                text += `${text ? ' — ' : ''}"${task.completion_note}"`;
+            }
+
+            return text;
+        },
+        paintCompletion(id, task) {
+            const done = task?.kind === 'task' && Boolean(task.is_done);
+            const note = done ? (task.completion_note || '') : '';
+            const completedBy = done ? (task.completed_by_name || '') : '';
+
+            document.querySelectorAll(`[data-task-id="${CSS.escape(String(id))}"]`).forEach((node) => {
+                const button = node.matches('button') ? node : node.closest('button');
+
+                if (!button) {
+                    return;
+                }
+
+                if (task.created_by_name) {
+                    button.dataset.createdBy = task.created_by_name;
+                }
+
+                if (task.updated_by_name) {
+                    button.dataset.updatedBy = task.updated_by_name;
+                }
+
+                if (completedBy) {
+                    button.dataset.completedBy = completedBy;
+                } else {
+                    delete button.dataset.completedBy;
+                }
+
+                if (note) {
+                    button.dataset.completionNote = note;
+                    button.title = note;
+                } else {
+                    delete button.dataset.completionNote;
+                    button.removeAttribute('title');
+                }
+            });
         },
         placeTodayItem(id, task) {
             const key = String(id);
@@ -1050,6 +1258,8 @@ document.addEventListener('alpine:init', () => {
                 id: key,
                 created_by_name: task.created_by_name || source?.dataset.createdBy || '',
                 updated_by_name: task.updated_by_name || source?.dataset.updatedBy || '',
+                completed_by_name: 'completed_by_name' in task ? (task.completed_by_name || '') : (source?.dataset.completedBy || ''),
+                completion_note: 'completion_note' in task ? (task.completion_note || '') : (source?.dataset.completionNote || ''),
             };
 
             if (task.kind === 'task' && task.date === this.today) {
@@ -1151,6 +1361,13 @@ document.addEventListener('alpine:init', () => {
             button.dataset.kind = task.kind;
             const done = task.kind === 'task' && Boolean(task.is_done);
             button.dataset.done = done ? '1' : '0';
+            button.dataset.createdBy = task.created_by_name || '';
+            button.dataset.updatedBy = task.updated_by_name || '';
+            button.dataset.completedBy = done ? (task.completed_by_name || '') : '';
+            button.dataset.completionNote = done ? (task.completion_note || '') : '';
+            if (done && task.completion_note) {
+                button.title = task.completion_note;
+            }
             button.className = this.calendarChipClass(task.kind, done);
             const label = document.createElement('span');
             label.className = 'block text-[10px] font-medium tracking-wide';
@@ -1169,6 +1386,7 @@ document.addEventListener('alpine:init', () => {
                     title: title.textContent,
                     kind: task.kind,
                     done: title.classList.contains('line-through'),
+                    completionNote: task.completion_note || '',
                 });
             });
             host.appendChild(button);
@@ -1257,6 +1475,8 @@ document.addEventListener('alpine:init', () => {
                 const kind = node.dataset.kind || 'task';
                 const title = (node.matches('[data-task-title]') ? node : node.querySelector('[data-task-title]'))?.textContent?.trim() || '';
                 const done = node.dataset.done === '1';
+                const note = node.dataset.completionNote || '';
+                const todayRow = document.querySelector(`[data-today-task="${CSS.escape(String(id))}"]`);
                 const row = document.createElement('li');
                 row.className = 'rounded-2xl bg-surface-low px-3 py-3';
 
@@ -1272,6 +1492,20 @@ document.addEventListener('alpine:init', () => {
                 name.textContent = title;
                 heading.appendChild(name);
                 row.appendChild(heading);
+
+                const byline = this.bylineText({
+                    created_by_name: node.dataset.createdBy || todayRow?.dataset.createdBy || '',
+                    updated_by_name: node.dataset.updatedBy || todayRow?.dataset.updatedBy || '',
+                    completed_by_name: node.dataset.completedBy || todayRow?.dataset.completedBy || '',
+                    completion_note: note || todayRow?.dataset.completionNote || '',
+                }, false);
+
+                if (byline) {
+                    const line = document.createElement('p');
+                    line.className = 'mt-1 text-xs text-on-surface-variant';
+                    line.textContent = byline;
+                    row.appendChild(line);
+                }
 
                 if (id !== 'pending') {
                     const actions = document.createElement('div');
@@ -1299,6 +1533,7 @@ document.addEventListener('alpine:init', () => {
                             title,
                             kind,
                             done,
+                            completionNote: note,
                         });
                     });
 
@@ -1315,47 +1550,22 @@ document.addEventListener('alpine:init', () => {
             });
         },
         async setItemDone(id, date, title, done) {
-            if (!this.claimSave()) {
-                return;
-            }
-
-            const snapshot = this.snapshotTask(id);
-            this.paintTask(id, { title, kind: 'task', is_done: done, date });
-            this.paintDayMarks(date);
-            this.refreshDaySheet();
-
-            try {
-                const response = await fetch(`/roster/tasks/${id}`, {
-                    method: 'PUT',
-                    headers: this.jsonHeaders(),
-                    body: JSON.stringify({
-                        date,
-                        title,
-                        kind: 'task',
-                        is_done: done,
-                    }),
-                });
-                const data = await this.readJson(response);
-
-                if (data === null) {
+            if (done) {
+                if (this.saving || this.completeOpen) {
                     return;
                 }
 
-                if (!response.ok) {
-                    throw new Error(this.errorText(data) || 'That task could not be updated.');
-                }
+                this.completeId = id;
+                this.completeDate = date;
+                this.completeTitle = title;
+                this.completeNote = '';
+                this.completeSource = 'sheet';
+                this.completeOpen = true;
 
-                this.noteActivity(data.activity);
-                this.applyByline(id, data.task);
-                this.syncUpcoming(data.task || { id, date, title, kind: 'task', is_done: done });
-            } catch (error) {
-                this.restoreTask(snapshot);
-                this.paintDayMarks(date);
-                this.refreshDaySheet();
-                this.toast(error.message || 'That task could not be updated.', 'error');
-            } finally {
-                this.releaseSave();
+                return;
             }
+
+            await this.persistCompletion({ id, date, title, done: false, note: '', revertCheck: true });
         },
         paintDayMarks(date) {
             if (!date) {
@@ -1686,5 +1896,7 @@ if (document.readyState === 'loading') {
 } else {
     armNavigation();
 }
+
+document.addEventListener('alpine:initialized', () => initDatePickers());
 
 Alpine.start();

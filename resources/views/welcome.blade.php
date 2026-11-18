@@ -4,7 +4,8 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title>{{ config('app.name', 'Laravel') }}</title>
+        <title>{{ ($name = trim((string) config('app.name'))) === '' || strcasecmp($name, 'Laravel') === 0 ? 'SUBJW IT Schedule' : $name }}</title>
+        <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
 
         @fonts
 

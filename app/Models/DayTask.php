@@ -8,13 +8,14 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['date', 'title', 'kind', 'user_id', 'is_done', 'created_by_name', 'updated_by_name'])]
+#[Fillable(['date', 'title', 'kind', 'user_id', 'is_done', 'created_by_name', 'updated_by_name', 'completion_note', 'completed_by_name', 'completed_at'])]
 class DayTask extends Model
 {
     protected function casts(): array
     {
         return [
             'is_done' => 'boolean',
+            'completed_at' => 'datetime',
         ];
     }
 

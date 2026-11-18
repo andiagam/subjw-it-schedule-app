@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['day_task_id', 'task_title', 'task_date', 'action', 'actor_name', 'actor_username'])]
+#[Fillable(['day_task_id', 'task_title', 'task_date', 'action', 'actor_name', 'actor_username', 'note'])]
 class TaskActivityLog extends Model
 {
     public function task(): BelongsTo
@@ -25,7 +25,7 @@ class TaskActivityLog extends Model
     }
 
     /**
-     * @return array{action: string, actor_name: string, task_title: string, task_date: string, when: string}
+     * @return array{action: string, actor_name: string, task_title: string, task_date: string, when: string, note: ?string}
      */
     public function toActivityArray(): array
     {
@@ -35,6 +35,7 @@ class TaskActivityLog extends Model
             'task_title' => $this->task_title,
             'task_date' => $this->task_date?->toDateString() ?? '',
             'when' => $this->created_at?->timezone(config('app.timezone'))->format('j M Y, H:i') ?? '',
+            'note' => $this->note,
         ];
     }
 }

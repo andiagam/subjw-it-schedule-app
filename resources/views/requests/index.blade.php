@@ -214,17 +214,20 @@
                         <option value="SCHEDULE_CHANGE">Schedule change</option>
                     </select>
                 </label>
-                <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                    <label class="block text-sm">
-                        <span class="m3-label" x-text="type === 'SCHEDULE_CHANGE' ? 'Date' : 'Start date'"></span>
-                        <input type="date" name="start_date" x-model="start" required class="m3-field">
-                    </label>
-                    <label class="block text-sm" x-show="type !== 'SCHEDULE_CHANGE'">
-                        <span class="m3-label">End date</span>
-                        <input type="date" name="end_date" x-model="end" x-bind:disabled="type === 'SCHEDULE_CHANGE'" required class="m3-field">
-                    </label>
-                </div>
-                <input type="hidden" name="end_date" x-bind:value="start" x-bind:disabled="type !== 'SCHEDULE_CHANGE'">
+                <label class="mt-3 block text-sm">
+                    <span class="m3-label" x-text="type === 'SCHEDULE_CHANGE' ? 'Date' : 'Dates'"></span>
+                    <x-date-range-picker
+                        mode="range"
+                        start-name="start_date"
+                        end-name="end_date"
+                        start-model="start"
+                        end-model="end"
+                        :start="old('start_date', '')"
+                        :end="old('end_date', '')"
+                        required
+                        x-bind:data-mode="type === 'SCHEDULE_CHANGE' ? 'single' : 'range'"
+                    />
+                </label>
                 <label class="mt-3 block text-sm" x-show="type === 'SCHEDULE_CHANGE'">
                     <span class="m3-label">Requested status</span>
                     <select name="requested_status" x-bind:disabled="type !== 'SCHEDULE_CHANGE'" class="m3-field">

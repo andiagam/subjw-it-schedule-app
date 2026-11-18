@@ -36,6 +36,7 @@
                 this.dp_balance = 0;
                 this.user_id = '';
                 this.open = true;
+                this.$nextTick(() => this.syncPickers());
             },
             openEdit(member) {
                 this.editing = true;
@@ -51,6 +52,10 @@
                 this.dp_balance = member.dp_balance;
                 this.user_id = member.id;
                 this.open = true;
+                this.$nextTick(() => this.syncPickers());
+            },
+            syncPickers() {
+                this.$root.querySelectorAll('[data-date-picker]').forEach((picker) => picker._picker?.read());
             },
             openReset(member) {
                 this.resetName = member.name;
@@ -227,13 +232,13 @@
                         <input type="password" name="pin" x-model="pin" inputmode="numeric" minlength="6" maxlength="32" pattern="[0-9]{6,}" x-bind:required="!editing" placeholder=" " autocomplete="new-password" class="peer m3-field tracking-[0.3em]">
                         <span class="m3-float" x-text="editing ? 'New PIN (optional)' : 'PIN (min. 6 digits)'"></span>
                     </label>
-                    <label class="relative block text-sm">
-                        <input type="date" name="start_date" x-model="start_date" placeholder=" " class="peer m3-field">
-                        <span class="m3-float">Start date</span>
+                    <label class="block text-sm">
+                        <span class="m3-label">Start date</span>
+                        <x-date-range-picker mode="single" start-name="start_date" end-name="" :named="true" start-model="start_date" :start="old('start_date', '')" clearable />
                     </label>
-                    <label class="relative block text-sm">
-                        <input type="date" name="end_date" x-model="end_date" placeholder=" " class="peer m3-field">
-                        <span class="m3-float">End date</span>
+                    <label class="block text-sm">
+                        <span class="m3-label">End date</span>
+                        <x-date-range-picker mode="single" start-name="end_date" end-name="" :named="true" start-model="end_date" :start="old('end_date', '')" clearable />
                     </label>
                     <label class="relative block text-sm">
                         <input type="number" name="al_balance" x-model="al_balance" min="0" max="999" required placeholder=" " class="peer m3-field">

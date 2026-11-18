@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Sign in')
+@section('title', 'Login')
 
 @section('content')
     <div class="m3-card w-full" style="--field-notch: var(--md-surface-container-low)">

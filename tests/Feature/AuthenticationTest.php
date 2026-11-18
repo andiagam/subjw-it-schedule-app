@@ -80,9 +80,13 @@ class AuthenticationTest extends TestCase
 
     public function test_login_page_does_not_list_demo_pins(): void
     {
+        config(['app.name' => 'Laravel']);
+
         $this->get(route('login'))
             ->assertOk()
             ->assertSee('Sign in')
+            ->assertSee('<title>Login · SUBJW IT Schedule</title>', false)
+            ->assertSee('rel="icon" type="image/svg+xml"', false)
             ->assertSee('Use your username and PIN (min. 6 digits).')
             ->assertDontSee('1234')
             ->assertDontSee('Demo accounts');

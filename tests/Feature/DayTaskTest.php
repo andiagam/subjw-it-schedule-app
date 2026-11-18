@@ -21,7 +21,6 @@ class DayTaskTest extends TestCase
         foreach ([
             ['date' => '2026-11-18', 'title' => 'Network maintenance', 'kind' => 'event'],
             ['date' => '2026-11-19', 'title' => 'Replace the switch', 'kind' => 'task'],
-            ['date' => '2026-11-20', 'title' => 'National Day', 'kind' => 'holiday'],
         ] as $payload) {
             $this->actingAsRoster($staff)
                 ->post(route('roster.tasks.store'), $payload)
@@ -30,6 +29,19 @@ class DayTaskTest extends TestCase
                     'year' => 2026,
                 ]));
         }
+
+        $this->actingAsRoster($staff)->post(route('roster.tasks.store'), [
+            'date' => '2026-11-20',
+            'title' => 'National Day',
+            'kind' => 'holiday',
+        ])->assertSessionHasErrors('kind');
+
+        DayTask::query()->create([
+            'date' => '2026-11-20',
+            'title' => 'National Day',
+            'kind' => 'holiday',
+            'user_id' => $staff->id,
+        ]);
 
         $this->assertDatabaseHas('day_tasks', [
             'date' => '2026-11-18',
@@ -45,6 +57,7 @@ class DayTaskTest extends TestCase
             ->assertSee('Replace the switch')
             ->assertSee('National Day')
             ->assertSee('data-red-day="2026-11-20"', false)
+            ->assertDontSee('value="holiday"', false)
             ->assertDontSee('id="sum-', false);
 
         $event = DayTask::query()->where('title', 'Network maintenance')->first();
@@ -140,11 +153,13 @@ class DayTaskTest extends TestCase
             'note' => 'Booked',
         ]);
 
-        $this->actingAsRoster($staff)->post(route('roster.tasks.store'), [
+        DayTask::query()->create([
             'date' => '2026-11-20',
             'title' => 'National Day',
             'kind' => 'holiday',
-        ])->assertRedirect();
+            'user_id' => $staff->id,
+        ]);
+        app(\App\Services\RosterService::class)->applyPublicHoliday('2026-11-20');
 
         $this->assertDatabaseHas('roster_entries', [
             'user_id' => $staff->id,
@@ -306,5 +321,128 @@ class DayTaskTest extends TestCase
             'actor_name' => 'Bintang',
             'actor_username' => 'tnbin839',
         ]);
+    }
+
+    public function test_completing_a_task_keeps_the_note_completer_and_time(): void
+    {
+        Carbon::setTestNow('2026-11-17 09:30:00');
+        $staff = User::factory()->create(['name' => 'Bintang', 'username' => 'tnbin839']);
+
+        $this->actingAsRoster($staff)->postJson(route('roster.tasks.store'), [
+            'date' => '2026-11-17',
+            'title' => 'Replace switch',
+            'kind' => 'task',
+        ])->assertOk();
+
+        $task = DayTask::query()->where('title', 'Replace switch')->first();
+
+        $this->actingAsRoster($staff)->putJson(route('roster.tasks.update', $task), [
+            'date' => '2026-11-17',
+            'title' => 'Replace switch',
+            'kind' => 'task',
+            'is_done' => true,
+            'completion_note' => 'Sudah dipasang dan tes koneksi OK',
+        ])->assertOk()
+            ->assertJsonPath('task.completion_note', 'Sudah dipasang dan tes koneksi OK')
+            ->assertJsonPath('task.completed_by_name', 'Bintang')
+            ->assertJsonPath('activity.0.action', 'completed')
+            ->assertJsonPath('activity.0.note', 'Sudah dipasang dan tes koneksi OK');
+
+        $task->refresh();
+        $this->assertSame('Bintang', $task->completed_by_name);
+        $this->assertNotNull($task->completed_at);
+        $completedAt = $task->completed_at->toDateTimeString();
+
+        $this->assertDatabaseHas('task_activity_logs', [
+            'day_task_id' => $task->id,
+            'action' => 'completed',
+            'actor_name' => 'Bintang',
+            'note' => 'Sudah dipasang dan tes koneksi OK',
+        ]);
+
+        $this->actingAsRoster($staff)
+            ->get(route('roster.index'))
+            ->assertOk()
+            ->assertSee('Added by Bintang · Completed by Bintang — "Sudah dipasang dan tes koneksi OK"')
+            ->assertSee('Sudah dipasang dan tes koneksi OK');
+
+        Carbon::setTestNow('2026-11-17 11:00:00');
+
+        $this->actingAsRoster($staff)->putJson(route('roster.tasks.update', $task), [
+            'date' => '2026-11-17',
+            'title' => 'Replace switch',
+            'kind' => 'task',
+            'is_done' => true,
+            'completion_note' => 'Tes ulang OK',
+        ])->assertOk()
+            ->assertJsonPath('activity.0.action', 'edited')
+            ->assertJsonPath('activity.0.note', 'Tes ulang OK');
+
+        $task->refresh();
+        $this->assertSame('Tes ulang OK', $task->completion_note);
+        $this->assertSame('Bintang', $task->completed_by_name);
+        $this->assertSame($completedAt, $task->completed_at->toDateTimeString());
+
+        $this->actingAsRoster($staff)->putJson(route('roster.tasks.update', $task), [
+            'date' => '2026-11-17',
+            'title' => 'Replace switch',
+            'kind' => 'task',
+            'is_done' => true,
+            'completion_note' => str_repeat('a', 501),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('completion_note');
+
+        $this->assertSame('Tes ulang OK', $task->refresh()->completion_note);
+
+        $this->actingAsRoster($staff)->putJson(route('roster.tasks.update', $task), [
+            'date' => '2026-11-17',
+            'title' => 'Replace switch',
+            'kind' => 'task',
+            'is_done' => false,
+        ])->assertOk()
+            ->assertJsonPath('activity.0.action', 'uncompleted')
+            ->assertJsonPath('task.completion_note', null)
+            ->assertJsonPath('task.completed_by_name', null);
+
+        $task->refresh();
+        $this->assertFalse($task->is_done);
+        $this->assertNull($task->completion_note);
+        $this->assertNull($task->completed_by_name);
+        $this->assertNull($task->completed_at);
+
+        $this->actingAsRoster($staff)->postJson(route('roster.tasks.store'), [
+            'date' => '2026-11-20',
+            'title' => 'National Day',
+            'kind' => 'holiday',
+            'completion_note' => 'Tidak disimpan',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('kind');
+
+        $this->assertDatabaseMissing('day_tasks', ['title' => 'National Day']);
+    }
+
+    public function test_a_date_range_creates_one_calendar_item_per_day(): void
+    {
+        $staff = User::factory()->create(['name' => 'Andi Agam']);
+
+        $this->actingAsRoster($staff)->postJson(route('roster.tasks.store'), [
+            'date' => '2026-11-18',
+            'end_date' => '2026-11-20',
+            'title' => 'IT Academy',
+            'kind' => 'event',
+        ])->assertOk()
+            ->assertJsonCount(3, 'tasks')
+            ->assertJsonPath('tasks.0.date', '2026-11-18')
+            ->assertJsonPath('tasks.2.date', '2026-11-20');
+
+        $this->assertSame(3, DayTask::query()->where('title', 'IT Academy')->count());
+
+        $this->actingAsRoster($staff)->postJson(route('roster.tasks.store'), [
+            'date' => '2026-11-01',
+            'end_date' => '2026-12-02',
+            'title' => 'Too long',
+            'kind' => 'task',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('end_date');
     }
 }
